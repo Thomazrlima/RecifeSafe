@@ -1,6 +1,6 @@
 # 🌧️ RecifeSafe
 
-<p align="center"> <img width="1913" height="674" alt="Banner RecifeSafe" src="https://raw.githubusercontent.com/Thomazrlima/RecifeSafe/main/banner.jpg" /> </p><p align="center"> </p><p align="center"> <a href="#-sobre-o-projeto">Sobre</a> • <a href="#-funcionalidades-principais">Funcionalidades</a> • <a href="#-metodologia">Metodologia</a> • <a href="#-tecnologias-utilizadas">Tecnologias</a> • <a href="#-estrutura-do-projeto">Estrutura</a> • <a href="#-instalação-e-uso">Instalação</a> • <a href="#-nossa-equipe">Equipe</a> • <a href="#-próximos-passos">Próximos Passos</a> </p>
+<p align="center"> <img width="1913" height="674" alt="Banner RecifeSafe" src="https://github.com/Thomazrlima/RecifeSafe/blob/main/img/banner.png" /> </p><p align="center"> </p><p align="center"> <a href="#-sobre-o-projeto">Sobre</a> • <a href="#-funcionalidades-principais">Funcionalidades</a> • <a href="#-metodologia">Metodologia</a> • <a href="#-tecnologias-utilizadas">Tecnologias</a> • <a href="#-estrutura-do-projeto">Estrutura</a> • <a href="#-instalação-e-uso">Instalação</a> • <a href="#-nossa-equipe">Equipe</a> • <a href="#-próximos-passos">Próximos Passos</a> </p>
 
 ## 🚀 Sobre o Projeto
 
@@ -127,7 +127,7 @@ RecifeSafe/
 
 | [<img src="https://github.com/Thomazrlima.png" width="100" style="border-radius:50%"><br>Thomaz Lima](https://github.com/Thomazrlima) | [<img src="https://github.com/lovepxdro.png" width="100" style="border-radius:50%"><br>Pedro Antônio](https://github.com/lovepxdro) | [<img src="https://github.com/Ferraz27.png" width="100" style="border-radius:50%"><br>Lucas Ferraz](https://github.com/Ferraz27) | [<img src="https://github.com/Henrique-12345.png" width="100" style="border-radius:50%"><br>Henrique Magalhães](https://github.com/Henrique-12345) | [<img src="https://github.com/a-guy-and-his-computer.png" width="100" style="border-radius:50%"><br>João Marcelo](https://github.com/a-guy-and-his-computer) |
 |:---:|:---:|:---:|:---:|:---:|
-| Coordenador de Projeto | Cientista de Dados | Desenvolvedor Backend | Analista de Dados | Especialista em Visualização |
+| Coordenador de Projeto | Cientista de Dados | Desenvolvedor Backend | Analista de Dados | Analista de Dados |
 
 </div>
 
