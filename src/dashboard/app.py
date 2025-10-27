@@ -463,65 +463,268 @@ else:
             dff_analysis = dff_analysis[dff_analysis['date'] >= start_date]
         
         if st.session_state['analysis_view'] == 'tides':
-            st.markdown("## 🌊 Análise de Marés × Chuva")
+            st.markdown("## 🌊 Análise: Marés × Chuva")
+            st.markdown("_Compreenda como a combinação de chuva e maré influencia o risco de alagamento_")
+            st.markdown("---")
             
+            # 1. Série Temporal Combinada
+            st.markdown("### 📈 Evolução Temporal: Chuva e Maré")
             ts = dff_analysis.groupby('date').agg({
-                'chuva_mm':'mean',
-                'mare_m':'mean'
-            }).rolling(7, min_periods=1).mean().reset_index()
+                'chuva_mm': 'mean',
+                'mare_m': 'mean',
+                'ocorrencias': 'sum'
+            }).reset_index()
             
             if not ts.empty and px is not None:
-                fig = px.line(ts, x='date', y=['chuva_mm', 'mare_m'], 
-                             labels={'value':'Valor', 'variable':'Variável', 'date':'Data'},
-                             title='Série Temporal: Chuva (mm) e Maré (m)')
-                fig.update_layout(height=450, hovermode='x unified')
+                # Gráfico de linhas duplas
+                fig = px.line(ts, x='date', y=['chuva_mm', 'mare_m'],
+                             labels={'value': 'Valor', 'variable': 'Variável', 'date': 'Data'},
+                             color_discrete_map={'chuva_mm': '#1f77b4', 'mare_m': '#ff7f0e'})
+                fig.update_layout(
+                    height=400,
+                    hovermode='x unified',
+                    legend=dict(
+                        orientation="h",
+                        yanchor="bottom",
+                        y=1.02,
+                        xanchor="right",
+                        x=1,
+                        title=None
+                    )
+                )
+                fig.update_traces(line=dict(width=2.5))
                 st.plotly_chart(fig, use_container_width=True)
                 
+                st.info("💡 **Interpretação:** As linhas mostram como chuva e maré variam ao longo do tempo. Picos simultâneos (ambas altas) indicam maior risco de alagamento.")
+                
+                # 2. Gráfico de Dispersão: Maré vs Chuva
+                st.markdown("### 🔵 Relação: Maré × Chuva")
+                
+                scatter_data = dff_analysis.copy()
+                scatter_data['risco_nivel'] = pd.cut(
+                    scatter_data['ocorrencias'],
+                    bins=[-1, 0, 1, 999],
+                    labels=['Sem ocorrências', 'Baixo', 'Alto']
+                )
+                
+                fig_scatter = px.scatter(
+                    scatter_data,
+                    x='mare_m',
+                    y='chuva_mm',
+                    color='risco_nivel',
+                    size='ocorrencias',
+                    color_discrete_map={
+                        'Sem ocorrências': '#90EE90',
+                        'Baixo': '#FFD700',
+                        'Alto': '#FF6B6B'
+                    },
+                    labels={
+                        'mare_m': 'Nível de Maré (m)',
+                        'chuva_mm': 'Chuva (mm)',
+                        'risco_nivel': 'Nível de Risco'
+                    },
+                    opacity=0.6
+                )
+                fig_scatter.update_layout(height=450)
+                st.plotly_chart(fig_scatter, use_container_width=True)
+                
+                st.info("💡 **Interpretação:** Cada ponto representa um dia em um bairro. Pontos vermelhos (alto risco) tendem a aparecer quando **maré E chuva** são altas simultaneamente.")
+                
+                # 3. Análise de Picos Simultâneos
+                st.markdown("### ⚠️ Momentos Críticos: Picos Simultâneos")
+                
+                ts_picos = ts.copy()
+                ts_picos['chuva_alta'] = ts_picos['chuva_mm'] > ts_picos['chuva_mm'].quantile(0.75)
+                ts_picos['mare_alta'] = ts_picos['mare_m'] > ts_picos['mare_m'].quantile(0.75)
+                ts_picos['pico_simultaneo'] = ts_picos['chuva_alta'] & ts_picos['mare_alta']
+                
+                dias_criticos = ts_picos[ts_picos['pico_simultaneo']].shape[0]
+                total_dias = len(ts_picos)
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("🔴 Dias Críticos", f"{dias_criticos}")
+                    st.caption("Maré E chuva altas")
+                with col2:
+                    st.metric("📊 Total de Dias", f"{total_dias}")
+                    st.caption("No período analisado")
+                with col3:
+                    perc_critico = (dias_criticos / total_dias * 100) if total_dias > 0 else 0
+                    st.metric("⚡ % Crítico", f"{perc_critico:.1f}%")
+                    st.caption("Frequência de risco")
+                
+                if dias_criticos > 0:
+                    st.warning(f"⚠️ **Atenção:** Foram identificados **{dias_criticos} dias críticos** no período, representando {perc_critico:.1f}% do tempo. Nestes momentos, a combinação de maré alta e chuva intensa eleva significativamente o risco de alagamento, especialmente em áreas litorâneas e ribeirinhas.")
+                else:
+                    st.success("✅ **Condições Favoráveis:** Não houve momentos críticos com picos simultâneos no período analisado.")
+                
+                # 4. Estatísticas Resumidas
                 st.markdown("### 📊 Estatísticas do Período")
                 col1, col2, col3, col4 = st.columns(4)
                 with col1:
-                    st.metric("Maré Média", f"{dff_analysis['mare_m'].mean():.2f}m")
+                    st.metric("🌊 Maré Média", f"{dff_analysis['mare_m'].mean():.2f}m")
                 with col2:
-                    st.metric("Maré Máxima", f"{dff_analysis['mare_m'].max():.2f}m")
+                    st.metric("📈 Maré Máxima", f"{dff_analysis['mare_m'].max():.2f}m")
                 with col3:
-                    st.metric("Chuva Média", f"{dff_analysis['chuva_mm'].mean():.1f}mm")
+                    st.metric("🌧️ Chuva Média", f"{dff_analysis['chuva_mm'].mean():.1f}mm")
                 with col4:
-                    st.metric("Chuva Total", f"{dff_analysis['chuva_mm'].sum():.0f}mm")
+                    st.metric("💧 Chuva Total", f"{dff_analysis['chuva_mm'].sum():.0f}mm")
                 
+                # 5. Correlação com Interpretação
                 if len(dff_analysis) > 1:
-                    corr_value = dff_analysis[['mare_m','chuva_mm']].corr().iloc[0,1]
-                    st.info(f"📈 **Correlação entre Maré e Chuva:** {corr_value:.3f}")
+                    corr_value = dff_analysis[['mare_m', 'chuva_mm']].corr().iloc[0, 1]
+                    
+                    if corr_value > 0.3:
+                        corr_msg = "forte relação positiva"
+                        corr_color = "error"
+                    elif corr_value > 0:
+                        corr_msg = "relação positiva moderada"
+                        corr_color = "warning"
+                    else:
+                        corr_msg = "relação fraca ou ausente"
+                        corr_color = "info"
+                    
+                    if corr_color == "error":
+                        st.error(f"📈 **Correlação:** {corr_value:.3f} - Indica {corr_msg}. Quando uma sobe, a outra tende a subir também.")
+                    elif corr_color == "warning":
+                        st.warning(f"📈 **Correlação:** {corr_value:.3f} - Indica {corr_msg}. Há alguma tendência de variação conjunta.")
+                    else:
+                        st.info(f"📈 **Correlação:** {corr_value:.3f} - Indica {corr_msg}. As variações são independentes.")
             else:
                 st.warning("Dados insuficientes para análise de marés.")
         
         elif st.session_state['analysis_view'] == 'weather':
-            st.markdown("## ☁️ Análise de Clima e Correlações")
+            st.markdown("## ☁️ Análise: Clima e Influência no Risco")
+            st.markdown("_Entenda como as condições climáticas impactam as ocorrências de alagamento_")
+            st.markdown("---")
             
-            corr_cols = ['chuva_mm','mare_m','vulnerabilidade','ocorrencias']
-            if set(corr_cols).issubset(dff_analysis.columns) and not dff_analysis.empty:
-                st.markdown("### 🔗 Matriz de Correlação")
-                corr = dff_analysis[corr_cols].corr()
-                fig_corr = px.imshow(corr, text_auto='.2f', 
-                                     labels=dict(x="Variável", y="Variável"),
-                                     color_continuous_scale='RdBu_r',
-                                     title='Correlação entre Variáveis')
-                fig_corr.update_layout(height=450)
-                st.plotly_chart(fig_corr, use_container_width=True)
+            if not dff_analysis.empty:
+                # 1. Dispersão: Chuva × Risco
+                st.markdown("### 🌧️ Impacto da Chuva no Risco")
                 
-                st.markdown("### 🌧️ Distribuição de Chuva")
-                fig_hist = px.histogram(dff_analysis, x='chuva_mm', nbins=30,
-                                       labels={'chuva_mm':'Chuva (mm)'},
-                                       title='Distribuição de Precipitação')
-                fig_hist.update_layout(height=350, showlegend=False)
-                st.plotly_chart(fig_hist, use_container_width=True)
+                scatter_chuva = dff_analysis.copy()
+                scatter_chuva['faixa_chuva'] = pd.cut(
+                    scatter_chuva['chuva_mm'],
+                    bins=[0, 10, 25, 50, 999],
+                    labels=['Leve (<10mm)', 'Moderada (10-25mm)', 'Forte (25-50mm)', 'Intensa (>50mm)']
+                )
                 
-                st.markdown("### 🌡️ Estatísticas Climáticas")
-                col1, col2, col3 = st.columns(3)
+                fig_chuva = px.scatter(
+                    scatter_chuva,
+                    x='chuva_mm',
+                    y='ocorrencias',
+                    color='vulnerabilidade',
+                    size='ocorrencias',
+                    color_continuous_scale='Reds',
+                    labels={
+                        'chuva_mm': 'Precipitação (mm)',
+                        'ocorrencias': 'Ocorrências',
+                        'vulnerabilidade': 'Vulnerabilidade'
+                    },
+                    opacity=0.6,
+                    trendline="lowess"
+                )
+                fig_chuva.update_layout(height=450)
+                st.plotly_chart(fig_chuva, use_container_width=True)
+                
+                st.info("💡 **Interpretação:** Cada ponto representa um dia/bairro. A linha de tendência mostra que **quanto maior a chuva, maior o número de ocorrências**. Pontos mais vermelhos indicam áreas mais vulneráveis.")
+                
+                # 2. Boxplot: Ocorrências por Faixa de Chuva
+                st.markdown("### 📦 Distribuição de Risco por Intensidade de Chuva")
+                
+                fig_box = px.box(
+                    scatter_chuva,
+                    x='faixa_chuva',
+                    y='ocorrencias',
+                    color='faixa_chuva',
+                    labels={
+                        'faixa_chuva': 'Intensidade da Chuva',
+                        'ocorrencias': 'Número de Ocorrências'
+                    },
+                    color_discrete_sequence=['#90EE90', '#FFD700', '#FFA500', '#FF6B6B']
+                )
+                fig_box.update_layout(height=400, showlegend=False)
+                st.plotly_chart(fig_box, use_container_width=True)
+                
+                st.info("💡 **Interpretação:** As caixas mostram a variação típica de ocorrências para cada faixa de chuva. **Chuvas intensas** (>50mm) geram consistentemente mais ocorrências, com valores máximos muito superiores.")
+                
+                # 3. Gráfico de Barras: Risco Médio por Faixa
+                st.markdown("### 📊 Risco Médio por Condição Climática")
+                
+                risco_por_faixa = scatter_chuva.groupby('faixa_chuva', observed=True).agg({
+                    'ocorrencias': 'mean',
+                    'vulnerabilidade': 'mean'
+                }).reset_index()
+                
+                fig_bar = px.bar(
+                    risco_por_faixa,
+                    x='faixa_chuva',
+                    y='ocorrencias',
+                    color='ocorrencias',
+                    labels={
+                        'faixa_chuva': 'Intensidade da Chuva',
+                        'ocorrencias': 'Ocorrências Médias'
+                    },
+                    color_continuous_scale='Reds',
+                    text_auto='.2f'
+                )
+                fig_bar.update_layout(height=400, showlegend=False)
+                st.plotly_chart(fig_bar, use_container_width=True)
+                
+                # Interpretação personalizada
+                media_leve = risco_por_faixa[risco_por_faixa['faixa_chuva'] == 'Leve (<10mm)']['ocorrencias'].values
+                media_intensa = risco_por_faixa[risco_por_faixa['faixa_chuva'] == 'Intensa (>50mm)']['ocorrencias'].values
+                
+                if len(media_leve) > 0 and len(media_intensa) > 0:
+                    fator = media_intensa[0] / media_leve[0] if media_leve[0] > 0 else 0
+                    st.warning(f"⚠️ **Destaque:** Chuvas intensas geram em média **{fator:.1f}x mais ocorrências** do que chuvas leves, evidenciando o impacto direto da precipitação no risco.")
+                
+                # 4. Dispersão 2D: Vulnerabilidade × Chuva
+                st.markdown("### 🎯 Relação: Vulnerabilidade × Precipitação")
+                
+                fig_vuln = px.density_heatmap(
+                    dff_analysis,
+                    x='vulnerabilidade',
+                    y='chuva_mm',
+                    z='ocorrencias',
+                    color_continuous_scale='YlOrRd',
+                    labels={
+                        'vulnerabilidade': 'Vulnerabilidade do Bairro',
+                        'chuva_mm': 'Precipitação (mm)',
+                        'ocorrencias': 'Densidade de Ocorrências'
+                    },
+                    nbinsx=20,
+                    nbinsy=20
+                )
+                fig_vuln.update_layout(height=450)
+                st.plotly_chart(fig_vuln, use_container_width=True)
+                
+                st.info("💡 **Interpretação:** Áreas mais escuras concentram maior número de ocorrências. Observa-se que **bairros mais vulneráveis** (à direita) sofrem mais impacto, mesmo com chuvas moderadas.")
+                
+                # 5. Distribuição de Chuva
+                st.markdown("### 🌧️ Distribuição de Precipitação")
+                
+                col1, col2 = st.columns([2, 1])
+                
                 with col1:
-                    st.metric("Dias com Chuva", int((dff_analysis['chuva_mm'] > 0).sum()))
+                    fig_hist = px.histogram(
+                        dff_analysis,
+                        x='chuva_mm',
+                        nbins=30,
+                        labels={'chuva_mm': 'Precipitação (mm)'},
+                        color_discrete_sequence=['#1f77b4']
+                    )
+                    fig_hist.update_layout(height=350, showlegend=False)
+                    st.plotly_chart(fig_hist, use_container_width=True)
+                
                 with col2:
+                    st.markdown("#### 📈 Estatísticas")
+                    st.metric("Dias com Chuva", int((dff_analysis['chuva_mm'] > 0).sum()))
                     st.metric("Média Diária", f"{dff_analysis['chuva_mm'].mean():.1f}mm")
-                with col3:
                     st.metric("Desvio Padrão", f"{dff_analysis['chuva_mm'].std():.1f}mm")
+                    st.metric("Máximo Registrado", f"{dff_analysis['chuva_mm'].max():.1f}mm")
+                
+                st.info("💡 **Interpretação:** O histograma mostra a frequência de diferentes volumes de chuva. A maioria dos dias tem chuva leve a moderada, mas eventos extremos (picos à direita) são os mais críticos.")
+                
             else:
-                st.warning("Dados insuficientes para análise de correlação.")
+                st.warning("Dados insuficientes para análise climática.")
