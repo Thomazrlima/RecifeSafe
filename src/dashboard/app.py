@@ -333,14 +333,46 @@ else:
             if st.button("🎯 Calcular Risco", use_container_width=True, type="primary"):
                 lr = joblib.load(models_dir / 'linear_regression_occ.joblib')
                 clf = joblib.load(models_dir / 'logistic_risk.joblib')
+                features_reg = joblib.load(models_dir / 'features_regression.joblib')
+                features_clf = joblib.load(models_dir / 'features_classification.joblib')
                 
                 def z(x, arr): return (x - arr.mean()) / (arr.std()+1e-9)
                 chuva_z = z(chuva_in, df['chuva_mm'])
                 mare_z = z(mare_in, df['mare_m'])
                 vuln_z = z(vuln_in, df['vulnerabilidade'])
                 
-                pred_occ = lr.predict([[chuva_z]])[0]
-                prob_risk = clf.predict_proba([[chuva_z, mare_z, vuln_z]])[0,1]
+                # Preparar features para regressão
+                feature_dict_reg = {
+                    'chuva_mm_z': chuva_z,
+                    'mare_m_z': mare_z,
+                    'vulnerabilidade_z': vuln_z,
+                    'chuva_x_vuln': chuva_z * vuln_z,
+                    'mare_x_vuln': mare_z * vuln_z,
+                    'chuva_x_mare': chuva_z * mare_z,
+                    'chuva_sq': chuva_z ** 2,
+                    'mare_sq': mare_z ** 2,
+                    'estacao_chuvosa': 1,  # Assumir período chuvoso por padrão
+                    'densidade_pop_z': 0.0,  # Valor médio
+                    'altitude_z': 0.0  # Valor médio
+                }
+                X_reg = [[feature_dict_reg.get(f, 0.0) for f in features_reg]]
+                
+                # Preparar features para classificação
+                feature_dict_clf = {
+                    'chuva_mm_z': chuva_z,
+                    'mare_m_z': mare_z,
+                    'vulnerabilidade_z': vuln_z,
+                    'chuva_x_vuln': chuva_z * vuln_z,
+                    'mare_x_vuln': mare_z * vuln_z,
+                    'chuva_sq': chuva_z ** 2,
+                    'estacao_chuvosa': 1,
+                    'densidade_pop_z': 0.0,
+                    'altitude_z': 0.0
+                }
+                X_clf = [[feature_dict_clf.get(f, 0.0) for f in features_clf]]
+                
+                pred_occ = lr.predict(X_reg)[0]
+                prob_risk = clf.predict_proba(X_clf)[0,1]
                 
                 st.markdown("---")
                 st.markdown("### 📈 Resultado da Previsão")
