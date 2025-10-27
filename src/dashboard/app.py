@@ -165,9 +165,15 @@ if st is None:
         print("  streamlit run src\\dashboard\\app.py")
         sys.exit(0)
 
-st.set_page_config(layout="wide", page_title="RecifeSafe")
-
 repo_root = Path(__file__).resolve().parents[2]
+logo_path = repo_root / 'img' / 'logo.png'
+
+st.set_page_config(
+    layout="wide", 
+    page_title="RecifeSafe",
+    page_icon=str(logo_path) if logo_path.exists() else "🏙️"
+)
+
 data_csv = repo_root / 'data' / 'processed' / 'simulated_daily.csv'
 models_dir = repo_root / 'models'
 
@@ -215,7 +221,12 @@ else:
     </style>
     """, unsafe_allow_html=True)
 
-    st.sidebar.title("🏙️ RecifeSafe")
+    logobar_path = repo_root / 'img' / 'logobar.png'
+    if logobar_path.exists():
+        st.sidebar.image(str(logobar_path), use_container_width=True)
+    else:
+        st.sidebar.title("🏙️ RecifeSafe")
+    
     page = st.sidebar.radio(
         "Navegação",
         ["🏠 Mapa de Risco", "⚠️ Alertas e Previsões", "📊 Análises Detalhadas"]
