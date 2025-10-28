@@ -92,25 +92,25 @@ A solução integra **dados meteorológicos, oceânicos, geoespaciais e sociais*
 
 ```
 RecifeSafe/
-├── 📊 data/                   # Bases de dados (raw e processed)
-│   ├── raw/                   # Dados brutos
-│   ├── processed/             # Dados tratados
-│   └── external/              # Dados de fontes externas
-├── 📓 notebooks/              # Análises exploratórias e modelagens
-│   ├── 01_eda.ipynb           # Análise exploratória
+├── data/
+│   ├── raw/
+│   ├── processed/
+│   └── external/
+├── notebooks/
+│   ├── 01_eda.ipynb
 │   ├── 02_feature_engineering.ipynb
-│   └── 03_modeling.ipynb      # Desenvolvimento de modelos
-├── 🎯 src/                    # Código-fonte principal
-│   ├── data/                  # Scripts de coleta e limpeza
-│   ├── models/                # Modelos de ML
-│   ├── visualization/         # Funções de visualização
-│   ├── dashboard/             # Aplicação Streamlit
-│   └── utils/                 # Utilitários e helpers
-├── 📋 docs/                   # Documentação adicional
-├── 🧪 tests/                  # Testes unitários e de integração
-├── 📄 requirements.txt        # Dependências do projeto
-├── 🐍 pyproject.toml          # Configuração Poetry
-└── 📖 README.md              # Este arquivo
+│   └── 03_modeling.ipynb
+├── src/
+│   ├── data/
+│   ├── models/
+│   ├── visualization/
+│   ├── dashboard/
+│   └── utils/
+├── docs/
+├── tests/
+├── requirements.txt
+├── pyproject.toml
+└── README.md
 ```
 
 ---

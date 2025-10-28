@@ -7,3 +7,5 @@ matplotlib
 seaborn
 folium
 plotly
+statsmodels
+scipy

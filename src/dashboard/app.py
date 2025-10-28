@@ -1,8 +1,8 @@
 from pathlib import Path
 import sys
 import argparse
-
 import warnings
+
 warnings.filterwarnings(
     "ignore",
     message="The keyword arguments have been deprecated and will be removed in a future release. Use `config` instead to specify Plotly configuration options."
@@ -153,7 +153,7 @@ if st is None:
             print("Verifique se pandas/folium estão instalados e se o CSV está correto.")
             print("Para executar o dashboard interativo, instale as dependências e inicie o Streamlit:")
             print("  pip install -r requirements.txt")
-            print("  streamlit run src/dashboard/app.py")
+            print("  streamlit run src\\dashboard\\app.py")
             sys.exit(1)
     else:
         if not data_csv.exists():
@@ -341,7 +341,6 @@ else:
                 mare_z = z(mare_in, df['mare_m'])
                 vuln_z = z(vuln_in, df['vulnerabilidade'])
                 
-                # Preparar features para regressão
                 feature_dict_reg = {
                     'chuva_mm_z': chuva_z,
                     'mare_m_z': mare_z,
@@ -351,13 +350,12 @@ else:
                     'chuva_x_mare': chuva_z * mare_z,
                     'chuva_sq': chuva_z ** 2,
                     'mare_sq': mare_z ** 2,
-                    'estacao_chuvosa': 1,  # Assumir período chuvoso por padrão
-                    'densidade_pop_z': 0.0,  # Valor médio
-                    'altitude_z': 0.0  # Valor médio
+                    'estacao_chuvosa': 1,
+                    'densidade_pop_z': 0.0,
+                    'altitude_z': 0.0
                 }
                 X_reg = [[feature_dict_reg.get(f, 0.0) for f in features_reg]]
                 
-                # Preparar features para classificação
                 feature_dict_clf = {
                     'chuva_mm_z': chuva_z,
                     'mare_m_z': mare_z,
@@ -390,7 +388,6 @@ else:
                     else:
                         st.success("🟢 RISCO BAIXO")
                 
-                # Alerta visual
                 if prob_risk > 0.7:
                     st.error("⚠️ **ALERTA:** Condições de alto risco! Recomenda-se atenção especial e possível evacuação de áreas vulneráveis.")
                 elif prob_risk > 0.5:
@@ -467,7 +464,6 @@ else:
             st.markdown("_Compreenda como a combinação de chuva e maré influencia o risco de alagamento_")
             st.markdown("---")
             
-            # 1. Série Temporal Combinada
             st.markdown("### 📈 Evolução Temporal: Chuva e Maré")
             ts = dff_analysis.groupby('date').agg({
                 'chuva_mm': 'mean',
@@ -476,7 +472,6 @@ else:
             }).reset_index()
             
             if not ts.empty and px is not None:
-                # Gráfico de linhas duplas
                 fig = px.line(ts, x='date', y=['chuva_mm', 'mare_m'],
                              labels={'value': 'Valor', 'variable': 'Variável', 'date': 'Data'},
                              color_discrete_map={'chuva_mm': '#1f77b4', 'mare_m': '#ff7f0e'})
@@ -497,7 +492,6 @@ else:
                 
                 st.info("💡 **Interpretação:** As linhas mostram como chuva e maré variam ao longo do tempo. Picos simultâneos (ambas altas) indicam maior risco de alagamento.")
                 
-                # 2. Gráfico de Dispersão: Maré vs Chuva
                 st.markdown("### 🔵 Relação: Maré × Chuva")
                 
                 scatter_data = dff_analysis.copy()
@@ -530,7 +524,6 @@ else:
                 
                 st.info("💡 **Interpretação:** Cada ponto representa um dia em um bairro. Pontos vermelhos (alto risco) tendem a aparecer quando **maré E chuva** são altas simultaneamente.")
                 
-                # 3. Análise de Picos Simultâneos
                 st.markdown("### ⚠️ Momentos Críticos: Picos Simultâneos")
                 
                 ts_picos = ts.copy()
@@ -558,7 +551,6 @@ else:
                 else:
                     st.success("✅ **Condições Favoráveis:** Não houve momentos críticos com picos simultâneos no período analisado.")
                 
-                # 4. Estatísticas Resumidas
                 st.markdown("### 📊 Estatísticas do Período")
                 col1, col2, col3, col4 = st.columns(4)
                 with col1:
@@ -570,7 +562,6 @@ else:
                 with col4:
                     st.metric("💧 Chuva Total", f"{dff_analysis['chuva_mm'].sum():.0f}mm")
                 
-                # 5. Correlação com Interpretação
                 if len(dff_analysis) > 1:
                     corr_value = dff_analysis[['mare_m', 'chuva_mm']].corr().iloc[0, 1]
                     
@@ -599,7 +590,6 @@ else:
             st.markdown("---")
             
             if not dff_analysis.empty:
-                # 1. Dispersão: Chuva × Risco
                 st.markdown("### 🌧️ Impacto da Chuva no Risco")
                 
                 scatter_chuva = dff_analysis.copy()
@@ -629,7 +619,6 @@ else:
                 
                 st.info("💡 **Interpretação:** Cada ponto representa um dia/bairro. A linha de tendência mostra que **quanto maior a chuva, maior o número de ocorrências**. Pontos mais vermelhos indicam áreas mais vulneráveis.")
                 
-                # 2. Boxplot: Ocorrências por Faixa de Chuva
                 st.markdown("### 📦 Distribuição de Risco por Intensidade de Chuva")
                 
                 fig_box = px.box(
@@ -648,7 +637,6 @@ else:
                 
                 st.info("💡 **Interpretação:** As caixas mostram a variação típica de ocorrências para cada faixa de chuva. **Chuvas intensas** (>50mm) geram consistentemente mais ocorrências, com valores máximos muito superiores.")
                 
-                # 3. Gráfico de Barras: Risco Médio por Faixa
                 st.markdown("### 📊 Risco Médio por Condição Climática")
                 
                 risco_por_faixa = scatter_chuva.groupby('faixa_chuva', observed=True).agg({
@@ -671,7 +659,6 @@ else:
                 fig_bar.update_layout(height=400, showlegend=False)
                 st.plotly_chart(fig_bar, use_container_width=True)
                 
-                # Interpretação personalizada
                 media_leve = risco_por_faixa[risco_por_faixa['faixa_chuva'] == 'Leve (<10mm)']['ocorrencias'].values
                 media_intensa = risco_por_faixa[risco_por_faixa['faixa_chuva'] == 'Intensa (>50mm)']['ocorrencias'].values
                 
@@ -679,7 +666,6 @@ else:
                     fator = media_intensa[0] / media_leve[0] if media_leve[0] > 0 else 0
                     st.warning(f"⚠️ **Destaque:** Chuvas intensas geram em média **{fator:.1f}x mais ocorrências** do que chuvas leves, evidenciando o impacto direto da precipitação no risco.")
                 
-                # 4. Dispersão 2D: Vulnerabilidade × Chuva
                 st.markdown("### 🎯 Relação: Vulnerabilidade × Precipitação")
                 
                 fig_vuln = px.density_heatmap(
@@ -701,7 +687,6 @@ else:
                 
                 st.info("💡 **Interpretação:** Áreas mais escuras concentram maior número de ocorrências. Observa-se que **bairros mais vulneráveis** (à direita) sofrem mais impacto, mesmo com chuvas moderadas.")
                 
-                # 5. Distribuição de Chuva
                 st.markdown("### 🌧️ Distribuição de Precipitação")
                 
                 col1, col2 = st.columns([2, 1])
@@ -728,3 +713,25 @@ else:
                 
             else:
                 st.warning("Dados insuficientes para análise climática.")
+
+def print_windows_instructions():
+    cmds = [
+        "cd c:\\PENTES\\RecifeSafe",
+        "python -m venv .venv",
+        ".\\.venv\\Scripts\\Activate.ps1",
+        "python -m pip install --upgrade pip",
+        "pip install -r requirements.txt",
+        "python src\\data\\generate_simulated_data.py",
+        "python src\\models\\train_models.py",
+        "streamlit run src\\dashboard\\app.py",
+        "",
+        "start \"\" \"%CD%\\src\\dashboard\\templates\\map_view.html\""
+    ]
+    print("\\nComandos PowerShell para Windows:\\n")
+    for c in cmds:
+        print(c)
+    print("")
+
+if args.instructions:
+    print_windows_instructions()
+    sys.exit(0)

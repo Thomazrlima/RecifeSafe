@@ -229,3 +229,4 @@ if __name__ == "__main__":
     repo_root = Path(__file__).resolve().parents[2]
     out_csv = repo_root / 'data' / 'processed' / 'simulated_daily.csv'
     generate_data(out_csv=out_csv)
+    
