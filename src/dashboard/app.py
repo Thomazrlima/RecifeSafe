@@ -2,6 +2,7 @@ from pathlib import Path
 import sys
 import argparse
 import warnings
+import json
 
 warnings.filterwarnings(
     "ignore",
@@ -258,45 +259,58 @@ else:
             mask = mask & (df['vulnerabilidade'] >= vuln_min)
         dff = df[mask].copy()
         
-        if not dff.empty and folium is not None:
-            center_lat = float(dff['lat'].mean())
-            center_lon = float(dff['lon'].mean())
+        st.markdown("### Mapa de Ocorrências")
+        if not df.empty and folium is not None:
+            center_lat = float(df['lat'].mean())
+            center_lon = float(df['lon'].mean())
             
             m = folium.Map(location=[center_lat, center_lon], zoom_start=12)
-            grouped = dff.groupby('bairro').agg({
-                'lat':'first',
-                'lon':'first',
-                'ocorrencias':'sum',
-                'vulnerabilidade':'mean'
-            }).reset_index()
             
-            for _, r in grouped.iterrows():
-                color = 'green'
-                if r['ocorrencias'] > 10 or r['vulnerabilidade'] > 0.6:
-                    color = 'red'
-                elif r['ocorrencias'] > 3:
-                    color = 'orange'
+            geojson_path = repo_root / 'data' / 'bairros' / 'bairros.geojson'
+            if geojson_path.exists():
+                with open(geojson_path, 'r', encoding='utf-8') as f:
+                    geojson_data = json.load(f)
                 
-                popup_html = f"""
-                <div style="font-family: Arial; min-width: 150px;">
-                    <h4 style="margin: 0 0 10px 0; color: #0b486b;">{r['bairro']}</h4>
-                    <p style="margin: 5px 0;"><b>Ocorrências:</b> {int(r['ocorrencias'])}</p>
-                    <p style="margin: 5px 0;"><b>Vulnerabilidade:</b> {r['vulnerabilidade']:.2f}</p>
-                    <p style="margin: 5px 0;"><b>Status:</b> <span style="color: {color}; font-weight: bold;">
-                        {'ALTO RISCO' if color == 'red' else 'RISCO MODERADO' if color == 'orange' else 'RISCO BAIXO'}
-                    </span></p>
-                </div>
-                """
+                bairros_selecionados_upper = [b.upper() for b in sel_bairro] if sel_bairro else []
                 
-                folium.CircleMarker(
-                    location=[float(r['lat']), float(r['lon'])],
-                    radius=8 + min(int(r['ocorrencias']), 10),
-                    color=color,
-                    fill=True,
-                    fillColor=color,
-                    fillOpacity=0.6,
-                    popup=folium.Popup(popup_html, max_width=250),
-                    tooltip=f"{r['bairro']}: {int(r['ocorrencias'])} ocorrências"
+                def normalize_nome(nome):
+                    return nome.upper().strip()
+                
+                def style_function(feature):
+                    bairro_nome = normalize_nome(feature['properties'].get('EBAIRRNOME', ''))
+                    
+                    if bairros_selecionados_upper and bairro_nome in bairros_selecionados_upper:
+                        return {
+                            'fillColor': '#FF0000',
+                            'color': '#000000',
+                            'weight': 2,
+                            'fillOpacity': 0.7
+                        }
+                    else:
+                        return {
+                            'fillColor': '#90EE90',
+                            'color': '#000000',
+                            'weight': 1,
+                            'fillOpacity': 0.4
+                        }
+                
+                def highlight_function(feature):
+                    return {
+                        'fillColor': '#FFFF00',
+                        'color': '#FF8C00',
+                        'weight': 3,
+                        'fillOpacity': 0.9
+                    }
+                
+                folium.GeoJson(
+                    geojson_data,
+                    style_function=style_function,
+                    highlight_function=highlight_function,
+                    tooltip=folium.GeoJsonTooltip(
+                        fields=['EBAIRRNOME'],
+                        aliases=['Bairro:'],
+                        localize=True
+                    )
                 ).add_to(m)
             
             html(m._repr_html_(), height=600)
