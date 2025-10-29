@@ -11,28 +11,16 @@ warnings.filterwarnings(
 
 parser = argparse.ArgumentParser(add_help=False)
 parser.add_argument("--instructions", action="store_true", help="Print Windows PowerShell instructions to set up venv and run the app")
-parser.add_argument("--open-html", action="store_true", help="When running with python (no streamlit), generate/open the fallback HTML map")
 args, _ = parser.parse_known_args()
 
 try:
     import streamlit as st
     from streamlit.components.v1 import html
-    try:
-        from streamlit.runtime.scriptrunner.script_run_context import get_script_run_ctx
-    except Exception:
-        get_script_run_ctx = None
-    if get_script_run_ctx is not None:
-        ctx = get_script_run_ctx()
-        if ctx is None and not args.open_html:
-            print("Streamlit importado, mas o app não foi iniciado com 'streamlit run'.")
-            print("Inicie assim para evitar warnings e executar o app interativo:")
-            print("  streamlit run src\\dashboard\\app.py")
-            print("Ou rode: python src\\dashboard\\app.py --open-html para gerar/abrir o HTML fallback")
-            sys.exit(0)
 except Exception:
-    st = None
-    def html(*args, **kwargs):
-        return None
+    print("Streamlit não encontrado. Instale as dependências:")
+    print("  pip install -r requirements.txt")
+    print("  streamlit run src\\dashboard\\app.py")
+    sys.exit(1)
 
 try:
     import pandas as pd
@@ -55,116 +43,6 @@ try:
     import joblib
 except Exception:
     joblib = None
-
-if st is None:
-    if not args.open_html:
-        print("Streamlit não encontrado ou executando diretamente com 'python'.")
-        print("Para iniciar o dashboard interativo instale dependências e execute via Streamlit:")
-        print("  python -m venv .venv")
-        print("  .\\.venv\\Scripts\\Activate.ps1")
-        print("  pip install -r requirements.txt")
-        print("  streamlit run src\\dashboard\\app.py")
-        print("")
-        print("Se quiser que o script gere/abra o HTML fallback automaticamente, execute:")
-        print("  python src\\dashboard\\app.py --open-html")
-        sys.exit(0)
-
-    repo_root = Path(__file__).resolve().parents[2]
-    templates_dir = repo_root / 'src' / 'dashboard' / 'templates'
-    wrapper = templates_dir / 'map_view.html'
-    map_file = templates_dir / 'map_generated.html'
-
-    if wrapper.exists():
-        print("Streamlit não encontrado. Abrindo versão HTML em seu navegador...")
-        import webbrowser
-        try:
-            webbrowser.open_new_tab(wrapper.as_uri())
-            print(f"Abrindo: {wrapper}")
-        except Exception:
-            print(f"Abrir manualmente o arquivo: {wrapper}")
-        sys.exit(0)
-
-    data_csv = repo_root / 'data' / 'processed' / 'simulated_daily.csv'
-    if data_csv.exists() and pd is not None and folium is not None:
-        try:
-            templates_dir.mkdir(parents=True, exist_ok=True)
-            df = pd.read_csv(data_csv, parse_dates=['date'])
-            grouped = df.groupby('bairro').agg({'lat':'mean','lon':'mean','ocorrencias':'sum','vulnerabilidade':'mean'}).reset_index()
-            if grouped.empty:
-                raise RuntimeError("Dados lidos mas agregação retornou vazio.")
-            center_lat = float(grouped['lat'].mean())
-            center_lon = float(grouped['lon'].mean())
-            m = folium.Map(location=[center_lat, center_lon], zoom_start=12)
-            for _, r in grouped.iterrows():
-                color = 'green'
-                if r['ocorrencias']>10 or r['vulnerabilidade']>0.6:
-                    color='red'
-                elif r['ocorrencias']>3:
-                    color='orange'
-                folium.CircleMarker(
-                    location=[float(r['lat']), float(r['lon'])],
-                    radius=6 + min(int(r['ocorrencias']), 10),
-                    color=color, fill=True,
-                    tooltip=f"{r['bairro']}: ocorr={int(r['ocorrencias'])}, vuln={r['vulnerabilidade']:.2f}"
-                ).add_to(m)
-            m.save(str(map_file))
-            wrapper_html = f"""<!doctype html>
-<html lang="pt-BR">
-<head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>RecifeSafe — Map View</title>
-  <style>
-    body{{margin:0;font-family:Arial,Helvetica,sans-serif}}
-    header{{padding:10px;background:#0b486b;color:#fff}}
-    .frame{{border:none;width:100%;height:90vh}}
-    .notice{{padding:16px;text-align:center;color:#444}}
-  </style>
-</head>
-<body>
-  <header><h2>RecifeSafe — Mapa Gerado</h2></header>
-  <!-- Primary embed: iframe -->
-  <iframe class="frame" src="{map_file.as_uri()}" title="RecifeSafe Map (iframe)"></iframe>
-  <!-- Fallback: object embedding and direct link -->
-  <div class="notice">
-    <p>Se o mapa acima não carregar, tente o fallback abaixo ou abra o arquivo diretamente.</p>
-    <object class="frame" data="{map_file.as_uri()}" type="text/html">
-      <p>Seu navegador não consegue exibir o mapa embutido. <a href="{map_file.as_uri()}" target="_blank" rel="noopener">Abrir mapa em nova aba</a></p>
-    </object>
-    <p><a href="{map_file.as_uri()}" target="_blank" rel="noopener">Abrir map_generated.html diretamente</a></p>
-  </div>
-</body>
-</html>"""
-            wrapper.write_text(wrapper_html, encoding='utf-8')
-            print(f"Mapa e wrapper gerados em: {templates_dir}")
-            import webbrowser
-            try:
-                webbrowser.open_new_tab(wrapper.as_uri())
-                print(f"Abrindo wrapper: {wrapper}")
-            except Exception:
-                print(f"Abrir manualmente o arquivo: {wrapper}")
-            try:
-                webbrowser.open_new_tab(map_file.as_uri())
-                print(f"Tentativa adicional: abrindo mapa diretamente: {map_file}")
-            except Exception:
-                pass
-            sys.exit(0)
-        except Exception as e:
-            print("Falha ao gerar mapa HTML automaticamente:", str(e))
-            print("Verifique se pandas/folium estão instalados e se o CSV está correto.")
-            print("Para executar o dashboard interativo, instale as dependências e inicie o Streamlit:")
-            print("  pip install -r requirements.txt")
-            print("  streamlit run src\\dashboard\\app.py")
-            sys.exit(1)
-    else:
-        if not data_csv.exists():
-            print(f"Dados ausentes: {data_csv}")
-        if pd is None or folium is None:
-            print("Bibliotecas necessárias para gerar o HTML não estão instaladas (pandas, folium).")
-        print("Para executar o dashboard interativo, instale as dependências e inicie o Streamlit:")
-        print("  pip install -r requirements.txt")
-        print("  streamlit run src\\dashboard\\app.py")
-        sys.exit(0)
 
 repo_root = Path(__file__).resolve().parents[2]
 logo_path = repo_root / 'img' / 'logo.png'
