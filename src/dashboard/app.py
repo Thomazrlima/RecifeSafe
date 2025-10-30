@@ -99,14 +99,42 @@ else:
     h1{font-size:2.5rem;font-weight:700;margin-bottom:1rem;}
     h2{font-size:2rem;font-weight:600;margin-top:2rem;}
     h3{font-size:1.5rem;font-weight:600;margin-top:1.5rem;}
-    [data-testid="stRadio"] label{font-size:1.05em;padding:8px;transition:all 0.2s ease;cursor:pointer;}
-    [data-testid="stRadio"] label:hover{background-color:rgba(220,53,69,0.05);border-radius:4px;}
-    [data-testid="column"]{display:flex;flex-direction:column;justify-content:flex-start;}
-    [data-testid="column"]>div{width:100%;}
-    .custom-alert{padding:1rem;border-radius:6px;margin:1rem 0;display:flex;align-items:flex-start;line-height:1.6;animation:fadeIn 0.3s ease-in;}
-    .custom-alert i{margin-right:10px;font-size:1.2em;margin-top:2px;}
-    @keyframes fadeIn{from{opacity:0;transform:translateY(-10px);}to{opacity:1;transform:translateY(0);}}
-    @media(max-width:768px){h1{font-size:2rem;}h2{font-size:1.75rem;}h3{font-size:1.25rem;}.stButton>button{padding:0.6rem 1rem;font-size:1rem;}.summary-box{padding:1rem;}}
+    /* SIDEBAR RADIO FIXED BUTTONS */
+    [data-testid="stRadio"] label{
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        width: 220px;           /* largura fixa do botão */
+        height: 44px;           /* altura fixa do botão */
+        padding: 0 12px;
+        box-sizing: border-box;
+        border-radius: 8px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-size: 1.05em;
+        cursor: pointer;
+        transition: background-color 0.15s ease;
+    }
+    [data-testid="stRadio"] label::before{
+        display: inline-block;
+        width: 28px;            /* largura fixa do ícone */
+        text-align: center;
+        font-size: 16px;        /* tamanho fixo do ícone */
+        margin-right: 8px;
+        flex: 0 0 28px;
+    }
+    [data-testid="stRadio"] label:hover{
+        background-color: rgba(220,53,69,0.04);
+    }
+    [data-testid="stRadio"] label[data-baseweb="radio"]{ /* fallback specificity */
+        align-items: center;
+    }
+    @media(max-width:768px){
+        h1{font-size:2rem;}h2{font-size:1.75rem;}h3{font-size:1.25rem;}.stButton>button{padding:0.6rem 1rem;font-size:1rem;}.summary-box{padding:1rem;}
+        [data-testid="stRadio"] label{width:180px;height:42px;font-size:0.98rem;}
+        [data-testid="stRadio"] label::before{width:26px;font-size:14px;}
+    }
     [data-testid="stDataFrame"]{border-radius:8px;overflow:hidden;}
     [data-testid="stSpinner"]{text-align:center;}
     </style>
@@ -137,9 +165,11 @@ else:
     # Adicionar ícones via CSS antes dos labels da navegação
     st.sidebar.markdown("""
         <style>
-        [data-testid="stRadio"] label:nth-child(1)::before { content: "\\f279"; font-family: "Font Awesome 6 Free"; font-weight: 900; margin-right: 8px; }
-        [data-testid="stRadio"] label:nth-child(2)::before { content: "\\f0f3"; font-family: "Font Awesome 6 Free"; font-weight: 900; margin-right: 8px; }
-        [data-testid="stRadio"] label:nth-child(3)::before { content: "\\f200"; font-family: "Font Awesome 6 Free"; font-weight: 900; margin-right: 8px; }
+        [data-testid="stRadio"] label:nth-child(1)::before { content: "\\f279"; font-family: "Font Awesome 6 Free"; font-weight: 900; font-size:16px; width:28px; display:inline-block; text-align:center; }
+        [data-testid="stRadio"] label:nth-child(2)::before { content: "\\f0f3"; font-family: "Font Awesome 6 Free"; font-weight: 900; font-size:16px; width:28px; display:inline-block; text-align:center; }
+        [data-testid="stRadio"] label:nth-child(3)::before { content: "\\f200"; font-family: "Font Awesome 6 Free"; font-weight: 900; font-size:16px; width:28px; display:inline-block; text-align:center; }
+        /* Garantir que o texto não quebre e que os botões mantenham tamanho fixo */
+        [data-testid="stRadio"] label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         </style>
     """, unsafe_allow_html=True)
 
