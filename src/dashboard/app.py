@@ -2,6 +2,7 @@ from pathlib import Path
 import sys
 import argparse
 import warnings
+import json
 
 warnings.filterwarnings(
     "ignore",
@@ -10,28 +11,16 @@ warnings.filterwarnings(
 
 parser = argparse.ArgumentParser(add_help=False)
 parser.add_argument("--instructions", action="store_true", help="Print Windows PowerShell instructions to set up venv and run the app")
-parser.add_argument("--open-html", action="store_true", help="When running with python (no streamlit), generate/open the fallback HTML map")
 args, _ = parser.parse_known_args()
 
 try:
     import streamlit as st
     from streamlit.components.v1 import html
-    try:
-        from streamlit.runtime.scriptrunner.script_run_context import get_script_run_ctx
-    except Exception:
-        get_script_run_ctx = None
-    if get_script_run_ctx is not None:
-        ctx = get_script_run_ctx()
-        if ctx is None and not args.open_html:
-            print("Streamlit importado, mas o app não foi iniciado com 'streamlit run'.")
-            print("Inicie assim para evitar warnings e executar o app interativo:")
-            print("  streamlit run src\\dashboard\\app.py")
-            print("Ou rode: python src\\dashboard\\app.py --open-html para gerar/abrir o HTML fallback")
-            sys.exit(0)
 except Exception:
-    st = None
-    def html(*args, **kwargs):
-        return None
+    print("Streamlit não encontrado. Instale as dependências:")
+    print("  pip install -r requirements.txt")
+    print("  streamlit run src\\dashboard\\app.py")
+    sys.exit(1)
 
 try:
     import pandas as pd
@@ -55,188 +44,110 @@ try:
 except Exception:
     joblib = None
 
-if st is None:
-    if not args.open_html:
-        print("Streamlit não encontrado ou executando diretamente com 'python'.")
-        print("Para iniciar o dashboard interativo instale dependências e execute via Streamlit:")
-        print("  python -m venv .venv")
-        print("  .\\.venv\\Scripts\\Activate.ps1")
-        print("  pip install -r requirements.txt")
-        print("  streamlit run src\\dashboard\\app.py")
-        print("")
-        print("Se quiser que o script gere/abra o HTML fallback automaticamente, execute:")
-        print("  python src\\dashboard\\app.py --open-html")
-        sys.exit(0)
-
-    repo_root = Path(__file__).resolve().parents[2]
-    templates_dir = repo_root / 'src' / 'dashboard' / 'templates'
-    wrapper = templates_dir / 'map_view.html'
-    map_file = templates_dir / 'map_generated.html'
-
-    if wrapper.exists():
-        print("Streamlit não encontrado. Abrindo versão HTML em seu navegador...")
-        import webbrowser
-        try:
-            webbrowser.open_new_tab(wrapper.as_uri())
-            print(f"Abrindo: {wrapper}")
-        except Exception:
-            print(f"Abrir manualmente o arquivo: {wrapper}")
-        sys.exit(0)
-
-    data_csv = repo_root / 'data' / 'processed' / 'simulated_daily.csv'
-    if data_csv.exists() and pd is not None and folium is not None:
-        try:
-            templates_dir.mkdir(parents=True, exist_ok=True)
-            df = pd.read_csv(data_csv, parse_dates=['date'])
-            grouped = df.groupby('bairro').agg({'lat':'mean','lon':'mean','ocorrencias':'sum','vulnerabilidade':'mean'}).reset_index()
-            if grouped.empty:
-                raise RuntimeError("Dados lidos mas agregação retornou vazio.")
-            center_lat = float(grouped['lat'].mean())
-            center_lon = float(grouped['lon'].mean())
-            m = folium.Map(location=[center_lat, center_lon], zoom_start=12)
-            for _, r in grouped.iterrows():
-                color = 'green'
-                if r['ocorrencias']>10 or r['vulnerabilidade']>0.6:
-                    color='red'
-                elif r['ocorrencias']>3:
-                    color='orange'
-                folium.CircleMarker(
-                    location=[float(r['lat']), float(r['lon'])],
-                    radius=6 + min(int(r['ocorrencias']), 10),
-                    color=color, fill=True,
-                    tooltip=f"{r['bairro']}: ocorr={int(r['ocorrencias'])}, vuln={r['vulnerabilidade']:.2f}"
-                ).add_to(m)
-            m.save(str(map_file))
-            wrapper_html = f"""<!doctype html>
-<html lang="pt-BR">
-<head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>RecifeSafe — Map View</title>
-  <style>
-    body{{margin:0;font-family:Arial,Helvetica,sans-serif}}
-    header{{padding:10px;background:#0b486b;color:#fff}}
-    .frame{{border:none;width:100%;height:90vh}}
-    .notice{{padding:16px;text-align:center;color:#444}}
-  </style>
-</head>
-<body>
-  <header><h2>RecifeSafe — Mapa Gerado</h2></header>
-  <!-- Primary embed: iframe -->
-  <iframe class="frame" src="{map_file.as_uri()}" title="RecifeSafe Map (iframe)"></iframe>
-  <!-- Fallback: object embedding and direct link -->
-  <div class="notice">
-    <p>Se o mapa acima não carregar, tente o fallback abaixo ou abra o arquivo diretamente.</p>
-    <object class="frame" data="{map_file.as_uri()}" type="text/html">
-      <p>Seu navegador não consegue exibir o mapa embutido. <a href="{map_file.as_uri()}" target="_blank" rel="noopener">Abrir mapa em nova aba</a></p>
-    </object>
-    <p><a href="{map_file.as_uri()}" target="_blank" rel="noopener">Abrir map_generated.html diretamente</a></p>
-  </div>
-</body>
-</html>"""
-            wrapper.write_text(wrapper_html, encoding='utf-8')
-            print(f"Mapa e wrapper gerados em: {templates_dir}")
-            import webbrowser
-            try:
-                webbrowser.open_new_tab(wrapper.as_uri())
-                print(f"Abrindo wrapper: {wrapper}")
-            except Exception:
-                print(f"Abrir manualmente o arquivo: {wrapper}")
-            try:
-                webbrowser.open_new_tab(map_file.as_uri())
-                print(f"Tentativa adicional: abrindo mapa diretamente: {map_file}")
-            except Exception:
-                pass
-            sys.exit(0)
-        except Exception as e:
-            print("Falha ao gerar mapa HTML automaticamente:", str(e))
-            print("Verifique se pandas/folium estão instalados e se o CSV está correto.")
-            print("Para executar o dashboard interativo, instale as dependências e inicie o Streamlit:")
-            print("  pip install -r requirements.txt")
-            print("  streamlit run src\\dashboard\\app.py")
-            sys.exit(1)
-    else:
-        if not data_csv.exists():
-            print(f"Dados ausentes: {data_csv}")
-        if pd is None or folium is None:
-            print("Bibliotecas necessárias para gerar o HTML não estão instaladas (pandas, folium).")
-        print("Para executar o dashboard interativo, instale as dependências e inicie o Streamlit:")
-        print("  pip install -r requirements.txt")
-        print("  streamlit run src\\dashboard\\app.py")
-        sys.exit(0)
-
 repo_root = Path(__file__).resolve().parents[2]
 logo_path = repo_root / 'img' / 'logo.png'
 
 st.set_page_config(
     layout="wide", 
     page_title="RecifeSafe",
-    page_icon=str(logo_path) if logo_path.exists() else "🏙️"
+    page_icon=str(logo_path) if logo_path.exists() else "🌊"
 )
 
 data_csv = repo_root / 'data' / 'processed' / 'simulated_daily.csv'
 models_dir = repo_root / 'models'
 
+# Cache de dados para melhor performance
+@st.cache_data(ttl=3600)
+def load_data(csv_path):
+    """Carrega e processa dados com cache de 1 hora"""
+    df = pd.read_csv(csv_path, parse_dates=['date'])
+    df['date'] = pd.to_datetime(df['date'])
+    return df
+
+@st.cache_resource
+def load_geojson(geojson_path):
+    """Carrega GeoJSON com cache permanente"""
+    with open(geojson_path, 'r', encoding='utf-8') as f:
+        return json.load(f)
+
 if not data_csv.exists():
     st.title("RecifeSafe")
     st.warning(f"Dados não encontrados em {data_csv}. Rode: python src/data/generate_simulated_data.py")
 else:
-    df = pd.read_csv(data_csv, parse_dates=['date'])
-    df['date'] = pd.to_datetime(df['date'])
+    with st.spinner('Carregando dados...'):
+        df = load_data(data_csv)
     bairros = sorted(df['bairro'].unique())
 
+    # Estilos CSS e Font Awesome
     st.markdown("""
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-    .main .block-container {
-        padding-top: 1rem;
-        max-width: 100%;
-    }
-    
-    /* Métricas */
-    [data-testid="stMetricValue"] {
-        font-size: 1.5rem;
-    }
-    
-    /* Botões */
-    .stButton > button {
-        border-radius: 6px;
-        font-weight: 500;
-    }
-    
-    /* Mapa em tela cheia */
-    iframe {
-        width: 100% !important;
-        border: none;
-        border-radius: 8px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    }
-    
-    /* Seção de resumo */
-    .summary-box {
-        background: #f8f9fa;
-        padding: 1.5rem;
-        border-radius: 8px;
-        margin-top: 1rem;
-    }
+    .main .block-container{padding-top:1rem;max-width:100%;}
+    [data-testid="stMetricValue"]{font-size:1.5rem;font-weight:600;}
+    [data-testid="stMetricLabel"]{font-size:0.9rem;color:#666;}
+    .stButton>button{border-radius:8px;font-weight:600;transition:all 0.3s cubic-bezier(0.4,0,0.2,1);padding:0.75rem 1.5rem;font-size:1.05rem;border:none;}
+    .stButton>button:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,0.25);}
+    .stButton>button:active{transform:translateY(0);box-shadow:0 2px 8px rgba(0,0,0,0.2);}
+    .stButton>button[kind="primary"]{background:linear-gradient(135deg,#dc3545 0%,#c82333 100%);}
+    .stButton>button[kind="primary"]:hover{background:linear-gradient(135deg,#c82333 0%,#bd2130 100%);}
+    iframe{width:100%!important;border:none;border-radius:8px;box-shadow:0 2px 12px rgba(0,0,0,0.1);}
+    .summary-box{background:#f8f9fa;padding:1.5rem;border-radius:8px;margin-top:1rem;box-shadow:0 2px 8px rgba(0,0,0,0.05);}
+    .nav-icon{margin-right:8px;font-size:1.1em;vertical-align:middle;}
+    .section-icon{margin-right:10px;color:#dc3545;font-size:1.2em;}
+    .metric-icon{font-size:1.5em;margin-right:8px;opacity:0.8;vertical-align:middle;}
+    h1 i,h2 i,h3 i{margin-right:12px;color:#dc3545;}
+    h1{font-size:2.5rem;font-weight:700;margin-bottom:1rem;}
+    h2{font-size:2rem;font-weight:600;margin-top:2rem;}
+    h3{font-size:1.5rem;font-weight:600;margin-top:1.5rem;}
+    [data-testid="stRadio"] label{font-size:1.05em;padding:8px;transition:all 0.2s ease;cursor:pointer;}
+    [data-testid="stRadio"] label:hover{background-color:rgba(220,53,69,0.05);border-radius:4px;}
+    [data-testid="column"]{display:flex;flex-direction:column;justify-content:flex-start;}
+    [data-testid="column"]>div{width:100%;}
+    .custom-alert{padding:1rem;border-radius:6px;margin:1rem 0;display:flex;align-items:flex-start;line-height:1.6;animation:fadeIn 0.3s ease-in;}
+    .custom-alert i{margin-right:10px;font-size:1.2em;margin-top:2px;}
+    @keyframes fadeIn{from{opacity:0;transform:translateY(-10px);}to{opacity:1;transform:translateY(0);}}
+    @media(max-width:768px){h1{font-size:2rem;}h2{font-size:1.75rem;}h3{font-size:1.25rem;}.stButton>button{padding:0.6rem 1rem;font-size:1rem;}.summary-box{padding:1rem;}}
+    [data-testid="stDataFrame"]{border-radius:8px;overflow:hidden;}
+    [data-testid="stSpinner"]{text-align:center;}
     </style>
     """, unsafe_allow_html=True)
 
     logobar_path = repo_root / 'img' / 'logobar.png'
     if logobar_path.exists():
-        st.sidebar.image(str(logobar_path), use_container_width=True)
+        st.sidebar.image(str(logobar_path), width='stretch')
     else:
-        st.sidebar.title("🏙️ RecifeSafe")
+        st.sidebar.markdown('<h2 style="text-align: center;"><i class="fas fa-city"></i> RecifeSafe</h2>', unsafe_allow_html=True)
     
+    # Navegação com ícones profissionais
+    st.sidebar.markdown("---")
     page = st.sidebar.radio(
         "Navegação",
-        ["🏠 Mapa de Risco", "⚠️ Alertas e Previsões", "📊 Análises Detalhadas"]
+        [
+            "Mapa de Risco",
+            "Alertas e Previsões",
+            "Análises"
+        ],
+        format_func=lambda x: {
+            "Mapa de Risco": "Mapa de Risco",
+            "Alertas e Previsões": "Alertas e Previsões", 
+            "Análises": "Análises"
+        }[x]
     )
+    
+    # Adicionar ícones via CSS antes dos labels da navegação
+    st.sidebar.markdown("""
+        <style>
+        [data-testid="stRadio"] label:nth-child(1)::before { content: "\\f279"; font-family: "Font Awesome 6 Free"; font-weight: 900; margin-right: 8px; }
+        [data-testid="stRadio"] label:nth-child(2)::before { content: "\\f0f3"; font-family: "Font Awesome 6 Free"; font-weight: 900; margin-right: 8px; }
+        [data-testid="stRadio"] label:nth-child(3)::before { content: "\\f200"; font-family: "Font Awesome 6 Free"; font-weight: 900; margin-right: 8px; }
+        </style>
+    """, unsafe_allow_html=True)
 
-    if page == "🏠 Mapa de Risco":
-        st.title("🏠 Mapa de Risco — Recife")
+    if page == "Mapa de Risco":
+        st.markdown('<h1><i class="fas fa-map-marked-alt"></i> Mapa de Risco — Recife</h1>', unsafe_allow_html=True)
         
         st.sidebar.markdown("---")
-        st.sidebar.markdown("### 🔍 Filtros")
+        st.sidebar.markdown('<h3><i class="fas fa-filter"></i> Filtros</h3>', unsafe_allow_html=True)
         sel_bairro = st.sidebar.multiselect("Bairros", options=bairros, default=bairros[:3] if len(bairros) >= 3 else bairros)
         period = st.sidebar.selectbox("Período", ["Últimos 7 dias","Últimos 30 dias","Últimos 90 dias"], index=1)
         vuln_min = st.sidebar.slider("Vulnerabilidade (mín)", 0.0, 1.0, 0.0, 0.01)
@@ -258,45 +169,57 @@ else:
             mask = mask & (df['vulnerabilidade'] >= vuln_min)
         dff = df[mask].copy()
         
-        if not dff.empty and folium is not None:
-            center_lat = float(dff['lat'].mean())
-            center_lon = float(dff['lon'].mean())
+        st.markdown("### Mapa de Ocorrências")
+        if not df.empty and folium is not None:
+            center_lat = float(df['lat'].mean())
+            center_lon = float(df['lon'].mean())
             
             m = folium.Map(location=[center_lat, center_lon], zoom_start=12)
-            grouped = dff.groupby('bairro').agg({
-                'lat':'first',
-                'lon':'first',
-                'ocorrencias':'sum',
-                'vulnerabilidade':'mean'
-            }).reset_index()
             
-            for _, r in grouped.iterrows():
-                color = 'green'
-                if r['ocorrencias'] > 10 or r['vulnerabilidade'] > 0.6:
-                    color = 'red'
-                elif r['ocorrencias'] > 3:
-                    color = 'orange'
+            geojson_path = repo_root / 'data' / 'bairros' / 'bairros.geojson'
+            if geojson_path.exists():
+                geojson_data = load_geojson(geojson_path)
                 
-                popup_html = f"""
-                <div style="font-family: Arial; min-width: 150px;">
-                    <h4 style="margin: 0 0 10px 0; color: #0b486b;">{r['bairro']}</h4>
-                    <p style="margin: 5px 0;"><b>Ocorrências:</b> {int(r['ocorrencias'])}</p>
-                    <p style="margin: 5px 0;"><b>Vulnerabilidade:</b> {r['vulnerabilidade']:.2f}</p>
-                    <p style="margin: 5px 0;"><b>Status:</b> <span style="color: {color}; font-weight: bold;">
-                        {'ALTO RISCO' if color == 'red' else 'RISCO MODERADO' if color == 'orange' else 'RISCO BAIXO'}
-                    </span></p>
-                </div>
-                """
+                bairros_selecionados_upper = [b.upper() for b in sel_bairro] if sel_bairro else []
                 
-                folium.CircleMarker(
-                    location=[float(r['lat']), float(r['lon'])],
-                    radius=8 + min(int(r['ocorrencias']), 10),
-                    color=color,
-                    fill=True,
-                    fillColor=color,
-                    fillOpacity=0.6,
-                    popup=folium.Popup(popup_html, max_width=250),
-                    tooltip=f"{r['bairro']}: {int(r['ocorrencias'])} ocorrências"
+                def normalize_nome(nome):
+                    return nome.upper().strip()
+                
+                def style_function(feature):
+                    bairro_nome = normalize_nome(feature['properties'].get('EBAIRRNOME', ''))
+                    
+                    if bairros_selecionados_upper and bairro_nome in bairros_selecionados_upper:
+                        return {
+                            'fillColor': '#FF0000',
+                            'color': '#000000',
+                            'weight': 2,
+                            'fillOpacity': 0.7
+                        }
+                    else:
+                        return {
+                            'fillColor': '#90EE90',
+                            'color': '#000000',
+                            'weight': 1,
+                            'fillOpacity': 0.4
+                        }
+                
+                def highlight_function(feature):
+                    return {
+                        'fillColor': '#FFFF00',
+                        'color': '#FF8C00',
+                        'weight': 3,
+                        'fillOpacity': 0.9
+                    }
+                
+                folium.GeoJson(
+                    geojson_data,
+                    style_function=style_function,
+                    highlight_function=highlight_function,
+                    tooltip=folium.GeoJsonTooltip(
+                        fields=['EBAIRRNOME'],
+                        aliases=['Bairro:'],
+                        localize=True
+                    )
                 ).add_to(m)
             
             html(m._repr_html_(), height=600)
@@ -304,42 +227,107 @@ else:
             st.info("Sem dados georreferenciados para o período selecionado.")
         
         st.markdown('<div class="summary-box">', unsafe_allow_html=True)
-        st.markdown("### 📊 Resumo dos Dados")
+        st.markdown('<h3><i class="fas fa-chart-bar"></i> Resumo dos Dados</h3>', unsafe_allow_html=True)
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            st.metric("🏘️ Bairros", len(dff['bairro'].unique()) if not dff.empty else 0)
+            st.markdown('<p style="font-size: 0.9em; color: #666;"><i class="fas fa-building metric-icon"></i>Bairros</p>', unsafe_allow_html=True)
+            st.metric("Bairros", len(dff['bairro'].unique()) if not dff.empty else 0, label_visibility="collapsed")
         with col2:
-            st.metric("⚠️ Ocorrências Totais", int(dff['ocorrencias'].sum()) if not dff.empty else 0)
+            st.markdown('<p style="font-size: 0.9em; color: #666;"><i class="fas fa-exclamation-triangle metric-icon"></i>Ocorrências Totais</p>', unsafe_allow_html=True)
+            st.metric("Ocorrências Totais", int(dff['ocorrencias'].sum()) if not dff.empty else 0, label_visibility="collapsed")
         with col3:
-            st.metric("🌡️ Vulnerabilidade Média", f"{dff['vulnerabilidade'].mean():.2f}" if not dff.empty else "0.00")
+            st.markdown('<p style="font-size: 0.9em; color: #666;"><i class="fas fa-shield-alt metric-icon"></i>Vulnerabilidade Média</p>', unsafe_allow_html=True)
+            st.metric("Vulnerabilidade Média", f"{dff['vulnerabilidade'].mean():.2f}" if not dff.empty else "0.00", label_visibility="collapsed")
         with col4:
-            st.metric("📅 Registros", int(dff.shape[0]) if not dff.empty else 0)
+            st.markdown('<p style="font-size: 0.9em; color: #666;"><i class="fas fa-calendar-alt metric-icon"></i>Registros</p>', unsafe_allow_html=True)
+            st.metric("Registros", int(dff.shape[0]) if not dff.empty else 0, label_visibility="collapsed")
         st.markdown('</div>', unsafe_allow_html=True)
 
-    elif page == "⚠️ Alertas e Previsões":
-        st.title("⚠️ Alertas e Previsões de Risco")
+    elif page == "Alertas e Previsões":
+        st.markdown('<h1><i class="fas fa-bell"></i> Alertas e Previsões de Risco</h1>', unsafe_allow_html=True)
         
-        st.markdown("### 🎯 Calcular Risco Futuro")
+        st.markdown('<h3><i class="fas fa-calculator"></i> Calcular Risco Futuro</h3>', unsafe_allow_html=True)
         
         col1, col2, col3 = st.columns(3)
         with col1:
-            chuva_in = st.number_input("Chuva (mm)", value=10.0, step=0.5, min_value=0.0)
+            chuva_in = st.number_input(
+                "Chuva (mm)", 
+                value=10.0, 
+                step=0.5, 
+                min_value=0.0, 
+                max_value=200.0,
+                help="Precipitação esperada em milímetros (0-200mm)"
+            )
         with col2:
-            mare_in = st.number_input("Maré (m)", value=0.8, step=0.05, min_value=0.0)
+            mare_in = st.number_input(
+                "Maré (m)", 
+                value=0.8, 
+                step=0.05, 
+                min_value=0.0, 
+                max_value=3.0,
+                help="Nível de maré esperado em metros (0-3m)"
+            )
         with col3:
-            vuln_in = st.slider("Vulnerabilidade", 0.0, 1.0, 0.3, 0.01)
+            vuln_in = st.slider(
+                "Vulnerabilidade", 
+                0.0, 
+                1.0, 
+                0.3, 
+                0.01,
+                help="Índice de vulnerabilidade do bairro (0=baixa, 1=alta)"
+            )
         
-        if (models_dir / 'linear_regression_occ.joblib').exists() and (models_dir / 'logistic_risk.joblib').exists():
-            if st.button("🎯 Calcular Risco", use_container_width=True, type="primary"):
+        @st.cache_resource
+        def load_models():
+            """Carrega modelos com cache para evitar recarregamento"""
+            try:
                 lr = joblib.load(models_dir / 'linear_regression_occ.joblib')
                 clf = joblib.load(models_dir / 'logistic_risk.joblib')
                 features_reg = joblib.load(models_dir / 'features_regression.joblib')
                 features_clf = joblib.load(models_dir / 'features_classification.joblib')
+                return lr, clf, features_reg, features_clf
+            except Exception as e:
+                st.error(f"Erro ao carregar modelos: {e}")
+                return None, None, None, None
+        
+        if (models_dir / 'linear_regression_occ.joblib').exists() and (models_dir / 'logistic_risk.joblib').exists():
+            # Adicionar ícone ao botão via CSS
+            st.markdown("""
+                <style>
+                [data-testid="stButton"] button[kind="primary"] {
+                    position: relative;
+                }
+                [data-testid="stButton"] button[kind="primary"]::before {
+                    content: "\\f3a5";
+                    font-family: "Font Awesome 6 Free";
+                    font-weight: 900;
+                    margin-right: 8px;
+                }
+                </style>
+            """, unsafe_allow_html=True)
+            if st.button("Calcular Risco", use_container_width=True, type="primary"):
+                lr, clf, features_reg, features_clf = load_models()
                 
-                def z(x, arr): return (x - arr.mean()) / (arr.std()+1e-9)
-                chuva_z = z(chuva_in, df['chuva_mm'])
-                mare_z = z(mare_in, df['mare_m'])
-                vuln_z = z(vuln_in, df['vulnerabilidade'])
+                if lr is None or clf is None:
+                    st.error("Erro ao carregar modelos. Verifique os arquivos.")
+                    st.stop()
+                
+                def z_score(x, arr):
+                    """Calcula z-score com tratamento robusto"""
+                    mean = arr.mean()
+                    std = arr.std()
+                    if std < 1e-9:  # Evita divisão por zero
+                        return 0.0
+                    return (x - mean) / std
+                
+                chuva_z = z_score(chuva_in, df['chuva_mm'])
+                mare_z = z_score(mare_in, df['mare_m'])
+                vuln_z = z_score(vuln_in, df['vulnerabilidade'])
+                
+                # Clipar valores extremos (máximo 3 desvios padrão)
+                chuva_z = np.clip(chuva_z, -3, 3)
+                mare_z = np.clip(mare_z, -3, 3)
+                vuln_z = np.clip(vuln_z, -3, 3)
                 
                 feature_dict_reg = {
                     'chuva_mm_z': chuva_z,
@@ -369,36 +357,46 @@ else:
                 }
                 X_clf = [[feature_dict_clf.get(f, 0.0) for f in features_clf]]
                 
-                pred_occ = lr.predict(X_reg)[0]
-                prob_risk = clf.predict_proba(X_clf)[0,1]
+                try:
+                    pred_occ = lr.predict(X_reg)[0]
+                    prob_risk = clf.predict_proba(X_clf)[0,1]
+                    
+                    # Validar outputs
+                    pred_occ = max(0, pred_occ)  # Não pode ser negativo
+                    prob_risk = np.clip(prob_risk, 0, 1)  # Entre 0 e 1
+                except Exception as e:
+                    st.error(f"Erro na previsão: {e}")
+                    st.stop()
                 
                 st.markdown("---")
-                st.markdown("### 📈 Resultado da Previsão")
+                st.markdown('<h3><i class="fas fa-chart-line"></i> Resultado da Previsão</h3>', unsafe_allow_html=True)
                 
                 col1, col2, col3 = st.columns(3)
                 with col1:
-                    st.metric("Ocorrências Previstas", f"{pred_occ:.1f}")
+                    st.markdown('<p style="font-size: 0.9em; color: #666;"><i class="fas fa-tachometer-alt metric-icon"></i>Ocorrências Previstas</p>', unsafe_allow_html=True)
+                    st.metric("Ocorrências Previstas", f"{pred_occ:.1f}", label_visibility="collapsed")
                 with col2:
-                    st.metric("Probabilidade de Risco", f"{prob_risk:.0%}")
+                    st.markdown('<p style="font-size: 0.9em; color: #666;"><i class="fas fa-percentage metric-icon"></i>Probabilidade de Risco</p>', unsafe_allow_html=True)
+                    st.metric("Probabilidade de Risco", f"{prob_risk:.0%}", label_visibility="collapsed")
                 with col3:
                     if prob_risk > 0.7:
-                        st.error("🔴 RISCO ALTO")
+                        st.markdown('<div style="text-align: center; padding: 20px; background: #f8d7da; border-radius: 8px; border-left: 4px solid #dc3545;"><i class="fas fa-exclamation-circle" style="font-size: 2em; color: #dc3545;"></i><br><strong style="color: #721c24;">RISCO ALTO</strong></div>', unsafe_allow_html=True)
                     elif prob_risk > 0.5:
-                        st.warning("🟡 RISCO MODERADO")
+                        st.markdown('<div style="text-align: center; padding: 20px; background: #fff3cd; border-radius: 8px; border-left: 4px solid #ffc107;"><i class="fas fa-exclamation-triangle" style="font-size: 2em; color: #ffc107;"></i><br><strong style="color: #856404;">RISCO MODERADO</strong></div>', unsafe_allow_html=True)
                     else:
-                        st.success("🟢 RISCO BAIXO")
+                        st.markdown('<div style="text-align: center; padding: 20px; background: #d4edda; border-radius: 8px; border-left: 4px solid #28a745;"><i class="fas fa-check-circle" style="font-size: 2em; color: #28a745;"></i><br><strong style="color: #155724;">RISCO BAIXO</strong></div>', unsafe_allow_html=True)
                 
                 if prob_risk > 0.7:
-                    st.error("⚠️ **ALERTA:** Condições de alto risco! Recomenda-se atenção especial e possível evacuação de áreas vulneráveis.")
+                    st.markdown('<div style="padding: 1rem; background-color: #f8d7da; border-left: 4px solid #dc3545; border-radius: 4px; margin: 1rem 0;"><p style="margin: 0; color: #721c24;"><i class="fas fa-exclamation-triangle" style="margin-right: 8px; color: #dc3545;"></i><strong>ALERTA:</strong> Condições de alto risco! Recomenda-se atenção especial e possível evacuação de áreas vulneráveis.</p></div>', unsafe_allow_html=True)
                 elif prob_risk > 0.5:
-                    st.warning("⚡ **ATENÇÃO:** Risco moderado. Monitorar situação e preparar medidas preventivas.")
+                    st.markdown('<div style="padding: 1rem; background-color: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px; margin: 1rem 0;"><p style="margin: 0; color: #856404;"><i class="fas fa-bolt" style="margin-right: 8px; color: #ffc107;"></i><strong>ATENÇÃO:</strong> Risco moderado. Monitorar situação e preparar medidas preventivas.</p></div>', unsafe_allow_html=True)
                 else:
-                    st.success("✅ **SEGURO:** Condições dentro da normalidade. Manter monitoramento de rotina.")
+                    st.markdown('<div style="padding: 1rem; background-color: #d4edda; border-left: 4px solid #28a745; border-radius: 4px; margin: 1rem 0;"><p style="margin: 0; color: #155724;"><i class="fas fa-check-circle" style="margin-right: 8px; color: #28a745;"></i><strong>SEGURO:</strong> Condições dentro da normalidade. Manter monitoramento de rotina.</p></div>', unsafe_allow_html=True)
         else:
-            st.info("⚙️ Modelos não encontrados. Execute: `python src/models/train_models.py`")
+            st.markdown('<div style="padding: 1rem; background-color: #d1ecf1; border-left: 4px solid #0c5460; border-radius: 4px; margin: 1rem 0;"><p style="margin: 0; color: #0c5460;"><i class="fas fa-info-circle" style="margin-right: 8px;"></i>Modelos não encontrados. Execute: <code>python src/models/train_models.py</code></p></div>', unsafe_allow_html=True)
         
         st.markdown("---")
-        st.markdown("### 📍 Locais Monitorados (por risco)")
+        st.markdown('<h3><i class="fas fa-map-marker-alt"></i> Locais Monitorados (por risco)</h3>', unsafe_allow_html=True)
         
         if df is not None and not df.empty:
             grouped_overall = df.groupby('bairro').agg({
@@ -415,8 +413,13 @@ else:
                 col1, col2, col3 = st.columns([3, 1, 1])
                 
                 with col1:
-                    icon = "🔴" if row['risk_score'] > 15 else "🟡" if row['risk_score'] > 8 else "🟢"
-                    st.markdown(f"{icon} **{row['bairro']}**")
+                    if row['risk_score'] > 15:
+                        icon_html = '<i class="fas fa-circle" style="color: #dc3545;"></i>'
+                    elif row['risk_score'] > 8:
+                        icon_html = '<i class="fas fa-circle" style="color: #ffc107;"></i>'
+                    else:
+                        icon_html = '<i class="fas fa-circle" style="color: #28a745;"></i>'
+                    st.markdown(f"{icon_html} **{row['bairro']}**", unsafe_allow_html=True)
                 
                 with col2:
                     st.caption(f"Ocorr: {int(row['ocorrencias'])}")
@@ -424,19 +427,64 @@ else:
                 with col3:
                     st.caption(f"Vuln: {row['vulnerabilidade']:.2f}")
 
-    elif page == "📊 Análises Detalhadas":
-        st.title("📊 Análises Detalhadas")
+    elif page == "Análises":
+        st.markdown('<h1><i class="fas fa-chart-pie"></i> Análises Detalhadas</h1>', unsafe_allow_html=True)
         
-        st.markdown("### Selecione a análise:")
-        col1, col2 = st.columns(2)
+        st.markdown('<h3><i class="fas fa-list-ul"></i> Selecione a análise:</h3>', unsafe_allow_html=True)
+        
+        # Botões de análise estilizados e alinhados
+        st.markdown("""
+            <style>
+            .analysis-button-container {
+                display: flex;
+                gap: 1rem;
+                margin: 1.5rem 0;
+            }
+            .analysis-button {
+                flex: 1;
+                padding: 1.2rem;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                border: none;
+                border-radius: 10px;
+                font-size: 1.1rem;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+                text-align: center;
+            }
+            .analysis-button:hover {
+                transform: translateY(-3px);
+                box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+            }
+            .analysis-button.weather {
+                background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+                box-shadow: 0 4px 15px rgba(240, 147, 251, 0.4);
+            }
+            .analysis-button.weather:hover {
+                box-shadow: 0 6px 20px rgba(240, 147, 251, 0.6);
+            }
+            .analysis-button i {
+                margin-right: 10px;
+                font-size: 1.3em;
+            }
+            </style>
+        """, unsafe_allow_html=True)
+        
+        col1, col2, col3 = st.columns(3)
         
         with col1:
-            if st.button("🌊 Marés × Chuva", use_container_width=True, type="primary"):
+            if st.button("Marés × Chuva", use_container_width=True, type="primary", key="btn_tides"):
                 st.session_state['analysis_view'] = 'tides'
         
         with col2:
-            if st.button("☁️ Clima e Correlações", use_container_width=True, type="primary"):
+            if st.button("Clima e Correlações", use_container_width=True, type="primary", key="btn_weather"):
                 st.session_state['analysis_view'] = 'weather'
+        
+        with col3:
+            if st.button("Ranking de Bairros", use_container_width=True, type="primary", key="btn_ranking"):
+                st.session_state['analysis_view'] = 'ranking'
         
         if 'analysis_view' not in st.session_state:
             st.session_state['analysis_view'] = 'tides'
@@ -444,7 +492,7 @@ else:
         st.markdown("---")
         
         st.sidebar.markdown("---")
-        st.sidebar.markdown("### 🔍 Filtros de Análise")
+        st.sidebar.markdown('<h3><i class="fas fa-sliders-h"></i> Filtros de Análise</h3>', unsafe_allow_html=True)
         period_analysis = st.sidebar.selectbox("Período", ["Últimos 7 dias","Últimos 30 dias","Últimos 90 dias"], index=1, key="period_analysis")
         
         start_date = None
@@ -460,11 +508,11 @@ else:
             dff_analysis = dff_analysis[dff_analysis['date'] >= start_date]
         
         if st.session_state['analysis_view'] == 'tides':
-            st.markdown("## 🌊 Análise: Marés × Chuva")
+            st.markdown('<h2><i class="fas fa-water"></i> Análise: Marés × Chuva</h2>', unsafe_allow_html=True)
             st.markdown("_Compreenda como a combinação de chuva e maré influencia o risco de alagamento_")
             st.markdown("---")
             
-            st.markdown("### 📈 Evolução Temporal: Chuva e Maré")
+            st.markdown('<h3><i class="fas fa-chart-area"></i> Evolução Temporal: Chuva e Maré</h3>', unsafe_allow_html=True)
             ts = dff_analysis.groupby('date').agg({
                 'chuva_mm': 'mean',
                 'mare_m': 'mean',
@@ -485,14 +533,19 @@ else:
                         xanchor="right",
                         x=1,
                         title=None
-                    )
+                    ),
+                    margin=dict(l=20, r=20, t=40, b=20),
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)'
                 )
                 fig.update_traces(line=dict(width=2.5))
-                st.plotly_chart(fig, use_container_width=True)
+                fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
+                fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
+                st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
                 
-                st.info("💡 **Interpretação:** As linhas mostram como chuva e maré variam ao longo do tempo. Picos simultâneos (ambas altas) indicam maior risco de alagamento.")
+                st.markdown('<div style="padding: 1rem; background-color: #d1ecf1; border-left: 4px solid #0c5460; border-radius: 4px; margin: 1rem 0;"><p style="margin: 0; color: #0c5460;"><i class="fas fa-lightbulb" style="margin-right: 8px;"></i><strong>Interpretação:</strong> As linhas mostram como chuva e maré variam ao longo do tempo. Picos simultâneos (ambas altas) indicam maior risco de alagamento.</p></div>', unsafe_allow_html=True)
                 
-                st.markdown("### 🔵 Relação: Maré × Chuva")
+                st.markdown('<h3><i class="fas fa-project-diagram"></i> Relação: Maré × Chuva</h3>', unsafe_allow_html=True)
                 
                 scatter_data = dff_analysis.copy()
                 scatter_data['risco_nivel'] = pd.cut(
@@ -519,12 +572,19 @@ else:
                     },
                     opacity=0.6
                 )
-                fig_scatter.update_layout(height=450)
-                st.plotly_chart(fig_scatter, use_container_width=True)
+                fig_scatter.update_layout(
+                    height=450,
+                    margin=dict(l=20, r=20, t=40, b=20),
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)'
+                )
+                fig_scatter.update_xaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
+                fig_scatter.update_yaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
+                st.plotly_chart(fig_scatter, use_container_width=True, config={'displayModeBar': False})
                 
-                st.info("💡 **Interpretação:** Cada ponto representa um dia em um bairro. Pontos vermelhos (alto risco) tendem a aparecer quando **maré E chuva** são altas simultaneamente.")
+                st.markdown('<div style="padding: 1rem; background-color: #d1ecf1; border-left: 4px solid #0c5460; border-radius: 4px; margin: 1rem 0;"><p style="margin: 0; color: #0c5460;"><i class="fas fa-lightbulb" style="margin-right: 8px;"></i><strong>Interpretação:</strong> Cada ponto representa um dia em um bairro. Pontos vermelhos (alto risco) tendem a aparecer quando <strong>maré E chuva</strong> são altas simultaneamente.</p></div>', unsafe_allow_html=True)
                 
-                st.markdown("### ⚠️ Momentos Críticos: Picos Simultâneos")
+                st.markdown('<h3><i class="fas fa-exclamation-triangle"></i> Momentos Críticos: Picos Simultâneos</h3>', unsafe_allow_html=True)
                 
                 ts_picos = ts.copy()
                 ts_picos['chuva_alta'] = ts_picos['chuva_mm'] > ts_picos['chuva_mm'].quantile(0.75)
@@ -536,61 +596,71 @@ else:
                 
                 col1, col2, col3 = st.columns(3)
                 with col1:
-                    st.metric("🔴 Dias Críticos", f"{dias_criticos}")
+                    st.markdown('<p style="font-size: 0.9em; color: #666;"><i class="fas fa-times-circle metric-icon" style="color: #dc3545;"></i>Dias Críticos</p>', unsafe_allow_html=True)
+                    st.metric("Dias Críticos", f"{dias_criticos}", label_visibility="collapsed")
                     st.caption("Maré E chuva altas")
                 with col2:
-                    st.metric("📊 Total de Dias", f"{total_dias}")
+                    st.markdown('<p style="font-size: 0.9em; color: #666;"><i class="fas fa-calendar-check metric-icon"></i>Total de Dias</p>', unsafe_allow_html=True)
+                    st.metric("Total de Dias", f"{total_dias}", label_visibility="collapsed")
                     st.caption("No período analisado")
                 with col3:
                     perc_critico = (dias_criticos / total_dias * 100) if total_dias > 0 else 0
-                    st.metric("⚡ % Crítico", f"{perc_critico:.1f}%")
+                    st.markdown('<p style="font-size: 0.9em; color: #666;"><i class="fas fa-bolt metric-icon" style="color: #ffc107;"></i>% Crítico</p>', unsafe_allow_html=True)
+                    st.metric("% Crítico", f"{perc_critico:.1f}%", label_visibility="collapsed")
                     st.caption("Frequência de risco")
                 
                 if dias_criticos > 0:
-                    st.warning(f"⚠️ **Atenção:** Foram identificados **{dias_criticos} dias críticos** no período, representando {perc_critico:.1f}% do tempo. Nestes momentos, a combinação de maré alta e chuva intensa eleva significativamente o risco de alagamento, especialmente em áreas litorâneas e ribeirinhas.")
+                    st.markdown(f'<div style="padding: 1rem; background-color: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px; margin: 1rem 0;"><p style="margin: 0; color: #856404;"><i class="fas fa-exclamation-triangle" style="margin-right: 8px; color: #ffc107;"></i><strong>Atenção:</strong> Foram identificados <strong>{dias_criticos} dias críticos</strong> no período, representando {perc_critico:.1f}% do tempo. Nestes momentos, a combinação de maré alta e chuva intensa eleva significativamente o risco de alagamento, especialmente em áreas litorâneas e ribeirinhas.</p></div>', unsafe_allow_html=True)
                 else:
-                    st.success("✅ **Condições Favoráveis:** Não houve momentos críticos com picos simultâneos no período analisado.")
+                    st.markdown('<div style="padding: 1rem; background-color: #d4edda; border-left: 4px solid #28a745; border-radius: 4px; margin: 1rem 0;"><p style="margin: 0; color: #155724;"><i class="fas fa-check-circle" style="margin-right: 8px; color: #28a745;"></i><strong>Condições Favoráveis:</strong> Não houve momentos críticos com picos simultâneos no período analisado.</p></div>', unsafe_allow_html=True)
                 
-                st.markdown("### 📊 Estatísticas do Período")
+                st.markdown('<h3><i class="fas fa-chart-bar"></i> Estatísticas do Período</h3>', unsafe_allow_html=True)
                 col1, col2, col3, col4 = st.columns(4)
                 with col1:
-                    st.metric("🌊 Maré Média", f"{dff_analysis['mare_m'].mean():.2f}m")
+                    st.markdown('<p style="font-size: 0.9em; color: #666;"><i class="fas fa-water metric-icon" style="color: #17a2b8;"></i>Maré Média</p>', unsafe_allow_html=True)
+                    st.metric("Maré Média", f"{dff_analysis['mare_m'].mean():.2f}m", label_visibility="collapsed")
                 with col2:
-                    st.metric("📈 Maré Máxima", f"{dff_analysis['mare_m'].max():.2f}m")
+                    st.markdown('<p style="font-size: 0.9em; color: #666;"><i class="fas fa-arrow-up metric-icon" style="color: #dc3545;"></i>Maré Máxima</p>', unsafe_allow_html=True)
+                    st.metric("Maré Máxima", f"{dff_analysis['mare_m'].max():.2f}m", label_visibility="collapsed")
                 with col3:
-                    st.metric("🌧️ Chuva Média", f"{dff_analysis['chuva_mm'].mean():.1f}mm")
+                    st.markdown('<p style="font-size: 0.9em; color: #666;"><i class="fas fa-cloud-rain metric-icon" style="color: #6c757d;"></i>Chuva Média</p>', unsafe_allow_html=True)
+                    st.metric("Chuva Média", f"{dff_analysis['chuva_mm'].mean():.1f}mm", label_visibility="collapsed")
                 with col4:
-                    st.metric("💧 Chuva Total", f"{dff_analysis['chuva_mm'].sum():.0f}mm")
+                    st.markdown('<p style="font-size: 0.9em; color: #666;"><i class="fas fa-tint metric-icon" style="color: #007bff;"></i>Chuva Total</p>', unsafe_allow_html=True)
+                    st.metric("Chuva Total", f"{dff_analysis['chuva_mm'].sum():.0f}mm", label_visibility="collapsed")
                 
                 if len(dff_analysis) > 1:
                     corr_value = dff_analysis[['mare_m', 'chuva_mm']].corr().iloc[0, 1]
                     
                     if corr_value > 0.3:
                         corr_msg = "forte relação positiva"
+                        corr_icon = "fas fa-arrow-trend-up"
                         corr_color = "error"
                     elif corr_value > 0:
                         corr_msg = "relação positiva moderada"
+                        corr_icon = "fas fa-chart-line"
                         corr_color = "warning"
                     else:
                         corr_msg = "relação fraca ou ausente"
+                        corr_icon = "fas fa-minus"
                         corr_color = "info"
                     
                     if corr_color == "error":
-                        st.error(f"📈 **Correlação:** {corr_value:.3f} - Indica {corr_msg}. Quando uma sobe, a outra tende a subir também.")
+                        st.markdown(f'<div style="padding: 1rem; background-color: #f8d7da; border-left: 4px solid #dc3545; border-radius: 4px; margin: 1rem 0;"><p style="margin: 0; color: #721c24;"><i class="fas fa-chart-line" style="margin-right: 8px; color: #dc3545;"></i><strong>Correlação:</strong> {corr_value:.3f} - Indica {corr_msg}. Quando uma sobe, a outra tende a subir também.</p></div>', unsafe_allow_html=True)
                     elif corr_color == "warning":
-                        st.warning(f"📈 **Correlação:** {corr_value:.3f} - Indica {corr_msg}. Há alguma tendência de variação conjunta.")
+                        st.markdown(f'<div style="padding: 1rem; background-color: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px; margin: 1rem 0;"><p style="margin: 0; color: #856404;"><i class="fas fa-chart-line" style="margin-right: 8px; color: #ffc107;"></i><strong>Correlação:</strong> {corr_value:.3f} - Indica {corr_msg}. Há alguma tendência de variação conjunta.</p></div>', unsafe_allow_html=True)
                     else:
-                        st.info(f"📈 **Correlação:** {corr_value:.3f} - Indica {corr_msg}. As variações são independentes.")
+                        st.markdown(f'<div style="padding: 1rem; background-color: #d1ecf1; border-left: 4px solid #0c5460; border-radius: 4px; margin: 1rem 0;"><p style="margin: 0; color: #0c5460;"><i class="fas fa-chart-bar" style="margin-right: 8px;"></i><strong>Correlação:</strong> {corr_value:.3f} - Indica {corr_msg}. As variações são independentes.</p></div>', unsafe_allow_html=True)
             else:
                 st.warning("Dados insuficientes para análise de marés.")
         
         elif st.session_state['analysis_view'] == 'weather':
-            st.markdown("## ☁️ Análise: Clima e Influência no Risco")
+            st.markdown('<h2><i class="fas fa-cloud-sun-rain"></i> Análise: Clima e Influência no Risco</h2>', unsafe_allow_html=True)
             st.markdown("_Entenda como as condições climáticas impactam as ocorrências de alagamento_")
             st.markdown("---")
             
             if not dff_analysis.empty:
-                st.markdown("### 🌧️ Impacto da Chuva no Risco")
+                st.markdown('<h3><i class="fas fa-cloud-showers-heavy"></i> Impacto da Chuva no Risco</h3>', unsafe_allow_html=True)
                 
                 scatter_chuva = dff_analysis.copy()
                 scatter_chuva['faixa_chuva'] = pd.cut(
@@ -614,12 +684,19 @@ else:
                     opacity=0.6,
                     trendline="lowess"
                 )
-                fig_chuva.update_layout(height=450)
-                st.plotly_chart(fig_chuva, use_container_width=True)
+                fig_chuva.update_layout(
+                    height=450,
+                    margin=dict(l=20, r=20, t=40, b=20),
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)'
+                )
+                fig_chuva.update_xaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
+                fig_chuva.update_yaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
+                st.plotly_chart(fig_chuva, use_container_width=True, config={'displayModeBar': False})
                 
-                st.info("💡 **Interpretação:** Cada ponto representa um dia/bairro. A linha de tendência mostra que **quanto maior a chuva, maior o número de ocorrências**. Pontos mais vermelhos indicam áreas mais vulneráveis.")
+                st.markdown('<div style="padding: 1rem; background-color: #d1ecf1; border-left: 4px solid #0c5460; border-radius: 4px; margin: 1rem 0;"><p style="margin: 0; color: #0c5460;"><i class="fas fa-lightbulb" style="margin-right: 8px;"></i><strong>Interpretação:</strong> Cada ponto representa um dia/bairro. A linha de tendência mostra que <strong>quanto maior a chuva, maior o número de ocorrências</strong>. Pontos mais vermelhos indicam áreas mais vulneráveis.</p></div>', unsafe_allow_html=True)
                 
-                st.markdown("### 📦 Distribuição de Risco por Intensidade de Chuva")
+                st.markdown('<h3><i class="fas fa-chart-box"></i> Distribuição de Risco por Intensidade de Chuva</h3>', unsafe_allow_html=True)
                 
                 fig_box = px.box(
                     scatter_chuva,
@@ -632,12 +709,20 @@ else:
                     },
                     color_discrete_sequence=['#90EE90', '#FFD700', '#FFA500', '#FF6B6B']
                 )
-                fig_box.update_layout(height=400, showlegend=False)
-                st.plotly_chart(fig_box, use_container_width=True)
+                fig_box.update_layout(
+                    height=400, 
+                    showlegend=False,
+                    margin=dict(l=20, r=20, t=40, b=20),
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)'
+                )
+                fig_box.update_xaxes(showgrid=False)
+                fig_box.update_yaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
+                st.plotly_chart(fig_box, use_container_width=True, config={'displayModeBar': False})
                 
-                st.info("💡 **Interpretação:** As caixas mostram a variação típica de ocorrências para cada faixa de chuva. **Chuvas intensas** (>50mm) geram consistentemente mais ocorrências, com valores máximos muito superiores.")
+                st.markdown('<div style="padding: 1rem; background-color: #d1ecf1; border-left: 4px solid #0c5460; border-radius: 4px; margin: 1rem 0;"><p style="margin: 0; color: #0c5460;"><i class="fas fa-lightbulb" style="margin-right: 8px;"></i><strong>Interpretação:</strong> As caixas mostram a variação típica de ocorrências para cada faixa de chuva. <strong>Chuvas intensas</strong> (>50mm) geram consistentemente mais ocorrências, com valores máximos muito superiores.</p></div>', unsafe_allow_html=True)
                 
-                st.markdown("### 📊 Risco Médio por Condição Climática")
+                st.markdown('<h3><i class="fas fa-chart-column"></i> Risco Médio por Condição Climática</h3>', unsafe_allow_html=True)
                 
                 risco_por_faixa = scatter_chuva.groupby('faixa_chuva', observed=True).agg({
                     'ocorrencias': 'mean',
@@ -656,17 +741,26 @@ else:
                     color_continuous_scale='Reds',
                     text_auto='.2f'
                 )
-                fig_bar.update_layout(height=400, showlegend=False)
-                st.plotly_chart(fig_bar, use_container_width=True)
+                fig_bar.update_layout(
+                    height=400, 
+                    showlegend=False,
+                    margin=dict(l=20, r=20, t=40, b=20),
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)'
+                )
+                fig_bar.update_xaxes(showgrid=False)
+                fig_bar.update_yaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
+                fig_bar.update_traces(textposition='outside')
+                st.plotly_chart(fig_bar, use_container_width=True, config={'displayModeBar': False})
                 
                 media_leve = risco_por_faixa[risco_por_faixa['faixa_chuva'] == 'Leve (<10mm)']['ocorrencias'].values
                 media_intensa = risco_por_faixa[risco_por_faixa['faixa_chuva'] == 'Intensa (>50mm)']['ocorrencias'].values
                 
                 if len(media_leve) > 0 and len(media_intensa) > 0:
                     fator = media_intensa[0] / media_leve[0] if media_leve[0] > 0 else 0
-                    st.warning(f"⚠️ **Destaque:** Chuvas intensas geram em média **{fator:.1f}x mais ocorrências** do que chuvas leves, evidenciando o impacto direto da precipitação no risco.")
+                    st.markdown(f'<div style="padding: 1rem; background-color: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px; margin: 1rem 0;"><p style="margin: 0; color: #856404;"><i class="fas fa-star" style="margin-right: 8px; color: #ffc107;"></i><strong>Destaque:</strong> Chuvas intensas geram em média <strong>{fator:.1f}x mais ocorrências</strong> do que chuvas leves, evidenciando o impacto direto da precipitação no risco.</p></div>', unsafe_allow_html=True)
                 
-                st.markdown("### 🎯 Relação: Vulnerabilidade × Precipitação")
+                st.markdown('<h3><i class="fas fa-crosshairs"></i> Relação: Vulnerabilidade × Precipitação</h3>', unsafe_allow_html=True)
                 
                 fig_vuln = px.density_heatmap(
                     dff_analysis,
@@ -682,12 +776,17 @@ else:
                     nbinsx=20,
                     nbinsy=20
                 )
-                fig_vuln.update_layout(height=450)
-                st.plotly_chart(fig_vuln, use_container_width=True)
+                fig_vuln.update_layout(
+                    height=450,
+                    margin=dict(l=20, r=20, t=40, b=20),
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)'
+                )
+                st.plotly_chart(fig_vuln, use_container_width=True, config={'displayModeBar': False})
                 
-                st.info("💡 **Interpretação:** Áreas mais escuras concentram maior número de ocorrências. Observa-se que **bairros mais vulneráveis** (à direita) sofrem mais impacto, mesmo com chuvas moderadas.")
+                st.markdown('<div style="padding: 1rem; background-color: #d1ecf1; border-left: 4px solid #0c5460; border-radius: 4px; margin: 1rem 0;"><p style="margin: 0; color: #0c5460;"><i class="fas fa-lightbulb" style="margin-right: 8px;"></i><strong>Interpretação:</strong> Áreas mais escuras concentram maior número de ocorrências. Observa-se que <strong>bairros mais vulneráveis</strong> (à direita) sofrem mais impacto, mesmo com chuvas moderadas.</p></div>', unsafe_allow_html=True)
                 
-                st.markdown("### 🌧️ Distribuição de Precipitação")
+                st.markdown('<h3><i class="fas fa-cloud-rain"></i> Distribuição de Precipitação</h3>', unsafe_allow_html=True)
                 
                 col1, col2 = st.columns([2, 1])
                 
@@ -699,20 +798,215 @@ else:
                         labels={'chuva_mm': 'Precipitação (mm)'},
                         color_discrete_sequence=['#1f77b4']
                     )
-                    fig_hist.update_layout(height=350, showlegend=False)
-                    st.plotly_chart(fig_hist, use_container_width=True)
+                    fig_hist.update_layout(
+                        height=350, 
+                        showlegend=False,
+                        margin=dict(l=20, r=20, t=40, b=20),
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        paper_bgcolor='rgba(0,0,0,0)'
+                    )
+                    fig_hist.update_xaxes(showgrid=False)
+                    fig_hist.update_yaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
+                    st.plotly_chart(fig_hist, use_container_width=True, config={'displayModeBar': False})
                 
                 with col2:
-                    st.markdown("#### 📈 Estatísticas")
-                    st.metric("Dias com Chuva", int((dff_analysis['chuva_mm'] > 0).sum()))
-                    st.metric("Média Diária", f"{dff_analysis['chuva_mm'].mean():.1f}mm")
-                    st.metric("Desvio Padrão", f"{dff_analysis['chuva_mm'].std():.1f}mm")
-                    st.metric("Máximo Registrado", f"{dff_analysis['chuva_mm'].max():.1f}mm")
+                    st.markdown('<h4><i class="fas fa-chart-line"></i> Estatísticas</h4>', unsafe_allow_html=True)
+                    st.markdown('<p style="font-size: 0.9em; color: #666;"><i class="fas fa-calendar-day metric-icon"></i>Dias com Chuva</p>', unsafe_allow_html=True)
+                    st.metric("Dias com Chuva", int((dff_analysis['chuva_mm'] > 0).sum()), label_visibility="collapsed")
+                    st.markdown('<p style="font-size: 0.9em; color: #666; margin-top: 10px;"><i class="fas fa-calculator metric-icon"></i>Média Diária</p>', unsafe_allow_html=True)
+                    st.metric("Média Diária", f"{dff_analysis['chuva_mm'].mean():.1f}mm", label_visibility="collapsed")
+                    st.markdown('<p style="font-size: 0.9em; color: #666; margin-top: 10px;"><i class="fas fa-wave-square metric-icon"></i>Desvio Padrão</p>', unsafe_allow_html=True)
+                    st.metric("Desvio Padrão", f"{dff_analysis['chuva_mm'].std():.1f}mm", label_visibility="collapsed")
+                    st.markdown('<p style="font-size: 0.9em; color: #666; margin-top: 10px;"><i class="fas fa-arrow-up-wide-short metric-icon"></i>Máximo Registrado</p>', unsafe_allow_html=True)
+                    st.metric("Máximo Registrado", f"{dff_analysis['chuva_mm'].max():.1f}mm", label_visibility="collapsed")
                 
-                st.info("💡 **Interpretação:** O histograma mostra a frequência de diferentes volumes de chuva. A maioria dos dias tem chuva leve a moderada, mas eventos extremos (picos à direita) são os mais críticos.")
+                st.markdown('<div style="padding: 1rem; background-color: #d1ecf1; border-left: 4px solid #0c5460; border-radius: 4px; margin: 1rem 0;"><p style="margin: 0; color: #0c5460;"><i class="fas fa-lightbulb" style="margin-right: 8px;"></i><strong>Interpretação:</strong> O histograma mostra a frequência de diferentes volumes de chuva. A maioria dos dias tem chuva leve a moderada, mas eventos extremos (picos à direita) são os mais críticos.</p></div>', unsafe_allow_html=True)
                 
             else:
-                st.warning("Dados insuficientes para análise climática.")
+                st.markdown('<div style="padding: 1rem; background-color: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px; margin: 1rem 0;"><p style="margin: 0; color: #856404;"><i class="fas fa-exclamation-circle" style="margin-right: 8px; color: #ffc107;"></i>Dados insuficientes para análise climática.</p></div>', unsafe_allow_html=True)
+        
+        elif st.session_state['analysis_view'] == 'ranking':
+            st.markdown('<h2><i class="fas fa-trophy"></i> Análise: Ranking de Bairros por Risco</h2>', unsafe_allow_html=True)
+            st.markdown("_Identifique e compare os bairros mais críticos do município_")
+            st.markdown("---")
+            
+            if not dff_analysis.empty:
+                # Agregação por bairro
+                ranking_bairros = dff_analysis.groupby('bairro').agg({
+                    'ocorrencias': 'sum',
+                    'vulnerabilidade': 'mean',
+                    'chuva_mm': 'mean',
+                    'mare_m': 'mean'
+                }).reset_index()
+                
+                # Cálculo de score de risco composto
+                ranking_bairros['score_risco'] = (
+                    ranking_bairros['ocorrencias'] * 0.4 +
+                    ranking_bairros['vulnerabilidade'] * 100 * 0.3 +
+                    ranking_bairros['chuva_mm'] * 0.2 +
+                    ranking_bairros['mare_m'] * 10 * 0.1
+                )
+                
+                ranking_bairros = ranking_bairros.sort_values('score_risco', ascending=False)
+                
+                st.markdown('<h3><i class="fas fa-chart-bar"></i> Top 10 Bairros Mais Críticos</h3>', unsafe_allow_html=True)
+                
+                # Gráfico de barras horizontais
+                fig_ranking = px.bar(
+                    ranking_bairros.head(10),
+                    y='bairro',
+                    x='score_risco',
+                    orientation='h',
+                    color='score_risco',
+                    color_continuous_scale='Reds',
+                    labels={
+                        'bairro': 'Bairro',
+                        'score_risco': 'Score de Risco'
+                    },
+                    text='score_risco'
+                )
+                fig_ranking.update_layout(
+                    height=500,
+                    margin=dict(l=20, r=20, t=40, b=20),
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    showlegend=False
+                )
+                fig_ranking.update_traces(texttemplate='%{text:.1f}', textposition='outside')
+                fig_ranking.update_xaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
+                fig_ranking.update_yaxes(showgrid=False)
+                st.plotly_chart(fig_ranking, use_container_width=True, config={'displayModeBar': False})
+                
+                st.markdown('<div style="padding: 1rem; background-color: #d1ecf1; border-left: 4px solid #0c5460; border-radius: 4px; margin: 1rem 0;"><p style="margin: 0; color: #0c5460;"><i class="fas fa-lightbulb" style="margin-right: 8px;"></i><strong>Interpretação:</strong> O score de risco é calculado considerando: <strong>40% ocorrências</strong>, <strong>30% vulnerabilidade</strong>, <strong>20% precipitação média</strong> e <strong>10% nível de maré</strong>. Quanto maior o score, maior a prioridade de atenção.</p></div>', unsafe_allow_html=True)
+                
+                st.markdown('<h3><i class="fas fa-table"></i> Detalhamento Completo</h3>', unsafe_allow_html=True)
+                
+                # Tabela interativa
+                ranking_display = ranking_bairros.copy()
+                ranking_display['score_risco'] = ranking_display['score_risco'].round(1)
+                ranking_display['vulnerabilidade'] = ranking_display['vulnerabilidade'].round(2)
+                ranking_display['chuva_mm'] = ranking_display['chuva_mm'].round(1)
+                ranking_display['mare_m'] = ranking_display['mare_m'].round(2)
+                
+                ranking_display.columns = ['Bairro', 'Ocorrências', 'Vulnerabilidade', 'Chuva Média (mm)', 'Maré Média (m)', 'Score de Risco']
+                
+                # Adicionar classificação
+                ranking_display.insert(0, 'Posição', range(1, len(ranking_display) + 1))
+                
+                st.dataframe(
+                    ranking_display,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "Posição": st.column_config.NumberColumn("Posição", width="small"),
+                        "Score de Risco": st.column_config.ProgressColumn(
+                            "Score de Risco",
+                            min_value=0,
+                            max_value=float(ranking_display['Score de Risco'].max()),
+                            format="%.1f"
+                        )
+                    }
+                )
+                
+                st.markdown('<h3><i class="fas fa-chart-scatter"></i> Matriz Risco × Vulnerabilidade</h3>', unsafe_allow_html=True)
+                
+                # Scatter plot posicionando bairros
+                fig_matriz = px.scatter(
+                    ranking_bairros,
+                    x='vulnerabilidade',
+                    y='ocorrencias',
+                    size='score_risco',
+                    color='score_risco',
+                    hover_name='bairro',
+                    color_continuous_scale='Reds',
+                    labels={
+                        'vulnerabilidade': 'Vulnerabilidade',
+                        'ocorrencias': 'Total de Ocorrências',
+                        'score_risco': 'Score de Risco'
+                    },
+                    size_max=30
+                )
+                
+                # Adicionar linhas de referência
+                media_vuln = ranking_bairros['vulnerabilidade'].median()
+                media_ocorr = ranking_bairros['ocorrencias'].median()
+                
+                fig_matriz.add_hline(y=media_ocorr, line_dash="dash", line_color="gray", opacity=0.5)
+                fig_matriz.add_vline(x=media_vuln, line_dash="dash", line_color="gray", opacity=0.5)
+                
+                # Adicionar anotações dos quadrantes
+                fig_matriz.add_annotation(
+                    x=0.25, y=media_ocorr + (ranking_bairros['ocorrencias'].max() - media_ocorr) * 0.5,
+                    text="Alta Ocorrência<br>Baixa Vulnerabilidade",
+                    showarrow=False,
+                    font=dict(size=10, color="gray"),
+                    opacity=0.6
+                )
+                fig_matriz.add_annotation(
+                    x=0.75, y=media_ocorr + (ranking_bairros['ocorrencias'].max() - media_ocorr) * 0.5,
+                    text="CRÍTICO<br>Alta Ocorrência + Alta Vulnerabilidade",
+                    showarrow=False,
+                    font=dict(size=10, color="red", weight="bold"),
+                    opacity=0.8
+                )
+                
+                fig_matriz.update_layout(
+                    height=500,
+                    margin=dict(l=20, r=20, t=40, b=20),
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)'
+                )
+                fig_matriz.update_xaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
+                fig_matriz.update_yaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
+                st.plotly_chart(fig_matriz, use_container_width=True, config={'displayModeBar': False})
+                
+                st.markdown('<div style="padding: 1rem; background-color: #d1ecf1; border-left: 4px solid #0c5460; border-radius: 4px; margin: 1rem 0;"><p style="margin: 0; color: #0c5460;"><i class="fas fa-lightbulb" style="margin-right: 8px;"></i><strong>Interpretação:</strong> Bairros no <strong>quadrante superior direito</strong> (alta ocorrência + alta vulnerabilidade) são os mais críticos e demandam atenção prioritária. O tamanho das bolhas representa o score composto de risco.</p></div>', unsafe_allow_html=True)
+                
+                # Comparação temporal
+                st.markdown('<h3><i class="fas fa-calendar-alt"></i> Evolução Temporal dos Top 5 Bairros</h3>', unsafe_allow_html=True)
+                
+                top5_bairros = ranking_bairros.head(5)['bairro'].tolist()
+                df_top5 = dff_analysis[dff_analysis['bairro'].isin(top5_bairros)].copy()
+                
+                evolucao_temporal = df_top5.groupby(['date', 'bairro']).agg({
+                    'ocorrencias': 'sum'
+                }).reset_index()
+                
+                fig_evolucao = px.line(
+                    evolucao_temporal,
+                    x='date',
+                    y='ocorrencias',
+                    color='bairro',
+                    labels={
+                        'date': 'Data',
+                        'ocorrencias': 'Ocorrências',
+                        'bairro': 'Bairro'
+                    },
+                    markers=True
+                )
+                fig_evolucao.update_layout(
+                    height=400,
+                    hovermode='x unified',
+                    margin=dict(l=20, r=20, t=40, b=20),
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    legend=dict(
+                        orientation="h",
+                        yanchor="bottom",
+                        y=1.02,
+                        xanchor="right",
+                        x=1
+                    )
+                )
+                fig_evolucao.update_traces(line=dict(width=2))
+                fig_evolucao.update_xaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
+                fig_evolucao.update_yaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
+                st.plotly_chart(fig_evolucao, use_container_width=True, config={'displayModeBar': False})
+                
+                st.markdown('<div style="padding: 1rem; background-color: #d1ecf1; border-left: 4px solid #0c5460; border-radius: 4px; margin: 1rem 0;"><p style="margin: 0; color: #0c5460;"><i class="fas fa-lightbulb" style="margin-right: 8px;"></i><strong>Interpretação:</strong> Acompanhe a variação de ocorrências ao longo do tempo nos 5 bairros mais críticos. Identifique padrões sazonais e picos de eventos.</p></div>', unsafe_allow_html=True)
+                
+            else:
+                st.markdown('<div style="padding: 1rem; background-color: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px; margin: 1rem 0;"><p style="margin: 0; color: #856404;"><i class="fas fa-exclamation-circle" style="margin-right: 8px; color: #ffc107;"></i>Dados insuficientes para análise de ranking.</p></div>', unsafe_allow_html=True)
 
 def print_windows_instructions():
     cmds = [
