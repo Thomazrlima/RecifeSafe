@@ -19,12 +19,8 @@ def load_and_prepare_data(csv_path: str) -> pd.DataFrame:
     """
     df = pd.read_csv(csv_path, parse_dates=['date'])
     df['date'] = pd.to_datetime(df['date'])
-    
-    # Converte bairro para categoria (economiza memória)
     if 'bairro' in df.columns:
         df['bairro'] = df['bairro'].astype('category')
-    
-    # Ordena por data
     df = df.sort_values('date')
     
     return df
@@ -61,7 +57,6 @@ def calculate_neighborhood_statistics(df: pd.DataFrame) -> pd.DataFrame:
         'mare_m': ['mean', 'max']
     }).round(2)
     
-    # Achata colunas multi-índice
     stats.columns = ['_'.join(col).strip() for col in stats.columns.values]
     stats = stats.reset_index()
     
@@ -95,15 +90,12 @@ def calculate_risk_ranking(df: pd.DataFrame,
         'mare_m': 'mean'
     })
     
-    # Calcula score composto
     stats['risk_score'] = (
         stats['ocorrencias'] * weights['occurrences'] +
         stats['vulnerabilidade'] * 100 * weights['vulnerability'] +
         stats['chuva_mm'] * weights['rainfall'] +
         stats['mare_m'] * 10 * weights['tide']
     )
-    
-    # Ordena por risco descendente
     stats = stats.sort_values('risk_score', ascending=False).reset_index()
     stats['rank'] = range(1, len(stats) + 1)
     
@@ -129,10 +121,8 @@ def get_temporal_trends(df: pd.DataFrame, neighborhoods: List[str],
     
     trends = filtered.groupby(['date', 'bairro'])[metric].sum().reset_index()
     
-    # Pivota para ter bairros como colunas
     trends_pivot = trends.pivot(index='date', columns='bairro', values=metric)
     
-    # Reamostra se necessário
     if resample_freq != 'D':
         trends_pivot = trends_pivot.resample(resample_freq).sum()
     
@@ -269,18 +259,14 @@ def prepare_prediction_features(chuva: float,
     Returns:
         Tupla com arrays de features (regressão, classificação)
     """
-    # Calcula z-scores
     chuva_z = (chuva - df['chuva_mm'].mean()) / df['chuva_mm'].std()
     mare_z = (mare - df['mare_m'].mean()) / df['mare_m'].std()
     
-    # Clipa valores extremos
     chuva_z = np.clip(chuva_z, -3, 3)
     mare_z = np.clip(mare_z, -3, 3)
     
-    # Features para regressão
     X_reg = np.array([[chuva_z, mare_z, vulnerabilidade, mes]])
     
-    # Features para classificação (adiciona interação)
     X_clf = np.array([[chuva_z, mare_z, vulnerabilidade, mes, chuva_z * mare_z]])
     
     return X_reg, X_clf

@@ -100,7 +100,7 @@ def calculate_z_score(value: float, array: np.ndarray) -> float:
     mean = array.mean()
     std = array.std()
     
-    if std < 1e-9:  # Evita divisão por zero
+    if std < 1e-9:
         return 0.0
     
     z = (value - mean) / std

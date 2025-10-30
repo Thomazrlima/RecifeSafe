@@ -55,8 +55,6 @@ st.set_page_config(
 
 data_csv = repo_root / 'data' / 'processed' / 'simulated_daily.csv'
 models_dir = repo_root / 'models'
-
-# Cache de dados para melhor performance
 @st.cache_data(ttl=3600)
 def load_data(csv_path):
     """Carrega e processa dados com cache de 1 hora"""
@@ -78,7 +76,6 @@ else:
         df = load_data(data_csv)
     bairros = sorted(df['bairro'].unique())
 
-    # Estilos CSS e Font Awesome
     st.markdown("""
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -118,7 +115,7 @@ else:
     else:
         st.sidebar.markdown('<h2 style="text-align: center;"><i class="fas fa-city"></i> RecifeSafe</h2>', unsafe_allow_html=True)
     
-    # Navegação com ícones profissionais
+    
     st.sidebar.markdown("---")
     page = st.sidebar.radio(
         "Navegação",
@@ -134,7 +131,6 @@ else:
         }[x]
     )
     
-    # Adicionar ícones via CSS antes dos labels da navegação
     st.sidebar.markdown("""
         <style>
         [data-testid="stRadio"] label:nth-child(1)::before { content: "\\f279"; font-family: "Font Awesome 6 Free"; font-weight: 900; margin-right: 8px; }
@@ -291,7 +287,6 @@ else:
                 return None, None, None, None
         
         if (models_dir / 'linear_regression_occ.joblib').exists() and (models_dir / 'logistic_risk.joblib').exists():
-            # Adicionar ícone ao botão via CSS
             st.markdown("""
                 <style>
                 [data-testid="stButton"] button[kind="primary"] {
@@ -316,7 +311,7 @@ else:
                     """Calcula z-score com tratamento robusto"""
                     mean = arr.mean()
                     std = arr.std()
-                    if std < 1e-9:  # Evita divisão por zero
+                    if std < 1e-9:
                         return 0.0
                     return (x - mean) / std
                 
@@ -324,7 +319,6 @@ else:
                 mare_z = z_score(mare_in, df['mare_m'])
                 vuln_z = z_score(vuln_in, df['vulnerabilidade'])
                 
-                # Clipar valores extremos (máximo 3 desvios padrão)
                 chuva_z = np.clip(chuva_z, -3, 3)
                 mare_z = np.clip(mare_z, -3, 3)
                 vuln_z = np.clip(vuln_z, -3, 3)
@@ -361,9 +355,8 @@ else:
                     pred_occ = lr.predict(X_reg)[0]
                     prob_risk = clf.predict_proba(X_clf)[0,1]
                     
-                    # Validar outputs
-                    pred_occ = max(0, pred_occ)  # Não pode ser negativo
-                    prob_risk = np.clip(prob_risk, 0, 1)  # Entre 0 e 1
+                    pred_occ = max(0, pred_occ)
+                    prob_risk = np.clip(prob_risk, 0, 1)
                 except Exception as e:
                     st.error(f"Erro na previsão: {e}")
                     st.stop()
@@ -432,7 +425,6 @@ else:
         
         st.markdown('<h3><i class="fas fa-list-ul"></i> Selecione a análise:</h3>', unsafe_allow_html=True)
         
-        # Botões de análise estilizados e alinhados
         st.markdown("""
             <style>
             .analysis-button-container {
@@ -831,7 +823,6 @@ else:
             st.markdown("---")
             
             if not dff_analysis.empty:
-                # Agregação por bairro
                 ranking_bairros = dff_analysis.groupby('bairro').agg({
                     'ocorrencias': 'sum',
                     'vulnerabilidade': 'mean',
@@ -839,7 +830,6 @@ else:
                     'mare_m': 'mean'
                 }).reset_index()
                 
-                # Cálculo de score de risco composto
                 ranking_bairros['score_risco'] = (
                     ranking_bairros['ocorrencias'] * 0.4 +
                     ranking_bairros['vulnerabilidade'] * 100 * 0.3 +
@@ -851,7 +841,6 @@ else:
                 
                 st.markdown('<h3><i class="fas fa-chart-bar"></i> Top 10 Bairros Mais Críticos</h3>', unsafe_allow_html=True)
                 
-                # Gráfico de barras horizontais
                 fig_ranking = px.bar(
                     ranking_bairros.head(10),
                     y='bairro',
@@ -881,7 +870,6 @@ else:
                 
                 st.markdown('<h3><i class="fas fa-table"></i> Detalhamento Completo</h3>', unsafe_allow_html=True)
                 
-                # Tabela interativa
                 ranking_display = ranking_bairros.copy()
                 ranking_display['score_risco'] = ranking_display['score_risco'].round(1)
                 ranking_display['vulnerabilidade'] = ranking_display['vulnerabilidade'].round(2)
@@ -890,7 +878,6 @@ else:
                 
                 ranking_display.columns = ['Bairro', 'Ocorrências', 'Vulnerabilidade', 'Chuva Média (mm)', 'Maré Média (m)', 'Score de Risco']
                 
-                # Adicionar classificação
                 ranking_display.insert(0, 'Posição', range(1, len(ranking_display) + 1))
                 
                 st.dataframe(
@@ -910,7 +897,6 @@ else:
                 
                 st.markdown('<h3><i class="fas fa-chart-scatter"></i> Matriz Risco × Vulnerabilidade</h3>', unsafe_allow_html=True)
                 
-                # Scatter plot posicionando bairros
                 fig_matriz = px.scatter(
                     ranking_bairros,
                     x='vulnerabilidade',
@@ -927,14 +913,12 @@ else:
                     size_max=30
                 )
                 
-                # Adicionar linhas de referência
                 media_vuln = ranking_bairros['vulnerabilidade'].median()
                 media_ocorr = ranking_bairros['ocorrencias'].median()
                 
                 fig_matriz.add_hline(y=media_ocorr, line_dash="dash", line_color="gray", opacity=0.5)
                 fig_matriz.add_vline(x=media_vuln, line_dash="dash", line_color="gray", opacity=0.5)
                 
-                # Adicionar anotações dos quadrantes
                 fig_matriz.add_annotation(
                     x=0.25, y=media_ocorr + (ranking_bairros['ocorrencias'].max() - media_ocorr) * 0.5,
                     text="Alta Ocorrência<br>Baixa Vulnerabilidade",
@@ -962,7 +946,6 @@ else:
                 
                 st.markdown('<div style="padding: 1rem; background-color: #d1ecf1; border-left: 4px solid #0c5460; border-radius: 4px; margin: 1rem 0;"><p style="margin: 0; color: #0c5460;"><i class="fas fa-lightbulb" style="margin-right: 8px;"></i><strong>Interpretação:</strong> Bairros no <strong>quadrante superior direito</strong> (alta ocorrência + alta vulnerabilidade) são os mais críticos e demandam atenção prioritária. O tamanho das bolhas representa o score composto de risco.</p></div>', unsafe_allow_html=True)
                 
-                # Comparação temporal
                 st.markdown('<h3><i class="fas fa-calendar-alt"></i> Evolução Temporal dos Top 5 Bairros</h3>', unsafe_allow_html=True)
                 
                 top5_bairros = ranking_bairros.head(5)['bairro'].tolist()

@@ -327,25 +327,21 @@ def validate_all_inputs(chuva: float, mare: float,
         'corrected_values': {}
     }
     
-    # Valida chuva
     valid, msg, corrected = validate_input_rainfall(chuva)
     if not valid or msg:
         results['messages'].append(f"Precipitação: {msg}")
         results['corrected_values']['chuva'] = corrected
     
-    # Valida maré
     valid, msg, corrected = validate_input_tide(mare)
     if not valid or msg:
         results['messages'].append(f"Maré: {msg}")
         results['corrected_values']['mare'] = corrected
     
-    # Valida vulnerabilidade
     valid, msg, corrected = validate_input_vulnerability(vulnerabilidade)
     if not valid or msg:
         results['messages'].append(f"Vulnerabilidade: {msg}")
         results['corrected_values']['vulnerabilidade'] = corrected
     
-    # Valida mês
     valid, msg, corrected = validate_input_month(mes)
     if not valid or msg:
         results['messages'].append(f"Mês: {msg}")
