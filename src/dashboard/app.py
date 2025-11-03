@@ -19,7 +19,7 @@ try:
 except Exception:
     print("Streamlit não encontrado. Instale as dependências:")
     print("  pip install -r requirements.txt")
-    print("  streamlit run src\\dashboard\\app.py")
+    print("  python -m streamlit run src\dashboard\app.py")
     sys.exit(1)
 
 try:
