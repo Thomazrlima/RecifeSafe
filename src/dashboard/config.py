@@ -46,35 +46,6 @@ PLOTLY_LAYOUT_BASE = {
     'font': dict(family='Inter, system-ui, -apple-system, sans-serif')
 }
 CACHE_TTL = 3600  # 1 hora em segundos
-INTERPRETATIONS = {
-    'tides_temporal': 'As linhas mostram como chuva e maré variam ao longo do tempo. Picos simultâneos (ambas altas) indicam maior risco de alagamento.',
-    'tides_scatter': 'Cada ponto representa um dia em um bairro. Pontos vermelhos (alto risco) tendem a aparecer quando **maré E chuva** são altas simultaneamente.',
-    'weather_impact': 'Cada ponto representa um dia/bairro. A linha de tendência mostra que **quanto maior a chuva, maior o número de ocorrências**. Pontos mais vermelhos indicam áreas mais vulneráveis.',
-    'weather_distribution': 'As caixas mostram a variação típica de ocorrências para cada faixa de chuva. **Chuvas intensas** (>50mm) geram consistentemente mais ocorrências, com valores máximos muito superiores.',
-    'vulnerability_heatmap': 'Áreas mais escuras concentram maior número de ocorrências. Observa-se que **bairros mais vulneráveis** (à direita) sofrem mais impacto, mesmo com chuvas moderadas.',
-    'precipitation_histogram': 'O histograma mostra a frequência de diferentes volumes de chuva. A maioria dos dias tem chuva leve a moderada, mas eventos extremos (picos à direita) são os mais críticos.',
-    'ranking_score': 'O score de risco é calculado considerando: **40% ocorrências**, **30% vulnerabilidade**, **20% precipitação média** e **10% nível de maré**. Quanto maior o score, maior a prioridade de atenção.',
-    'ranking_matrix': 'Bairros no **quadrante superior direito** (alta ocorrência + alta vulnerabilidade) são os mais críticos e demandam atenção prioritária. O tamanho das bolhas representa o score composto de risco.',
-    'ranking_temporal': 'Acompanhe a variação de ocorrências ao longo do tempo nos 5 bairros mais críticos. Identifique padrões sazonais e picos de eventos.'
-}
-ALERT_MESSAGES = {
-    'high_risk': 'Condições de alto risco! Recomenda-se atenção especial e possível evacuação de áreas vulneráveis.',
-    'moderate_risk': 'Risco moderado. Monitorar situação e preparar medidas preventivas.',
-    'low_risk': 'Condições dentro da normalidade. Manter monitoramento de rotina.',
-    'critical_days': 'Foram identificados **{dias} dias críticos** no período, representando {percentual:.1f}% do tempo. Nestes momentos, a combinação de maré alta e chuva intensa eleva significativamente o risco de alagamento, especialmente em áreas litorâneas e ribeirinhas.',
-    'favorable_conditions': 'Não houve momentos críticos com picos simultâneos no período analisado.'
-}
-PERIOD_DAYS = {
-    'Últimos 7 dias': 7,
-    'Últimos 30 dias': 30,
-    'Últimos 90 dias': 90
-}
-HELP_TEXTS = {
-    'rainfall': 'Precipitação esperada em milímetros (0-200mm)',
-    'tide': 'Nível de maré esperado em metros (0-3m)',
-    'vulnerability': 'Índice de vulnerabilidade do bairro (0=baixa, 1=alta)'
-}
-CACHE_TTL = 3600  # 1 hora em segundos
 
 INTERPRETATIONS = {
     'tides_temporal': 'As linhas mostram como chuva e maré variam ao longo do tempo. Picos simultâneos (ambas altas) indicam maior risco de alagamento.',

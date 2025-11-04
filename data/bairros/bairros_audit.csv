@@ -1,0 +1,100 @@
+timestamp,action,bairro,note
+2025-11-04T19:33:20.956843,estimated_vulnerability,COELHOS,used_estimated_vuln=0.0
+2025-11-04T19:33:20.959854,prediction,COELHOS,"{""timestamp"": ""2025-11-04T19:33:20.956843"", ""bairro"": ""COELHOS"", ""chuva_mm_used"": 18.420246575342468, ""chuva_mm_estimated"": false, ""vulnerabilidade_used"": 0.0, ""vulnerabilidade_estimated"": true, ""mare_m_used"": 0.8, ""predicted_occurrences"": 0.598275155679094, ""predicted_risk_probability"": 1.653543411213299e-05}"
+2025-11-04T19:33:41.375005,add_bairro,CURADO,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,DOIS UNIDOS,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,AFLITOS,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,SANCHO,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,VARZEA,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,COELHOS,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,PEIXINHOS,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,SAO JOSE,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,SANTO ANTONIO,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,RECIFE,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,HIPODROMO,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,ROSARINHO,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,CAMPINA DO BARRETO,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,CASA FORTE,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,PARNAMIRIM,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,GUABIRABA,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,ILHA JOANA BEZERRA,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,CABANGA,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,ILHA DO LEITE,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,PAU FERRO,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,MANGUEIRA,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,SANTO AMARO,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,BOA VISTA,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,ESPINHEIRO,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,DERBY,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,SANTANA,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,PAISSANDU,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,TOTO,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,GRACAS,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,TORRE,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,ARRUDA,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,ENGENHO DO MEIO,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,CAJUEIRO,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,ZUMBI,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,TAMARINEIRA,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,BONGI,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,CIDADE UNIVERSITARIA,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,TORREAO,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,JAQUEIRA,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,CACOTE,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,IPSEP,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,PORTO DA MADEIRA,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,JORDAO,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,PRADO,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,DOIS IRMAOS,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,MADALENA,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,SOLEDADE,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,TORROES,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,IPUTINGA,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,SAN MARTIN,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,PASSARINHO,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,JARDIM SAO PAULO,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,AREIAS,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,TEJIPIO,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,CORDEIRO,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,BARRO,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,ESTANCIA,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,FUNDAO,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,COQUEIRAL,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,POCO,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,CAXANGA,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,SITIO DOS PINTOS,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,BEBERIBE,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,BOMBA DO HEMETERIO,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,MANGABEIRA,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,CASA AMARELA,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,LINHA DO TIRO,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,ENCRUZILHADA,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,BRASILIA TEIMOSA,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,PINA,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,BREJO DA GUABIRABA,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,ILHA DO RETIRO,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,MUSTARDINHA,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,IBURA,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,ALTO JOSE BONIFACIO,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,ALTO DO MANDU,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,MORRO DA CONCEICAO,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,ALTO JOSE DO PINHO,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,VASCO DA GAMA,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,BOA VIAGEM,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,ALTO SANTA TEREZINHA,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,MACAXEIRA,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,BREJO DE BEBERIBE,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,NOVA DESCOBERTA,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,MONTEIRO,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,CAMPO GRANDE,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,AGUA FRIA,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,IMBIRIBEIRA,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,JIQUIA,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,AFOGADOS,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,APIPUCOS,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,CORREGO DO JENIPAPO,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,PONTO DE PARADA,added from geojson
+2025-11-04T19:33:41.375005,add_bairro,COHAB,added from geojson
+2025-11-04T19:50:52.499721,prediction,TORRE,"{""timestamp"": ""2025-11-04T19:50:52.499721"", ""bairro"": ""TORRE"", ""chuva_mm_used"": 200.0, ""chuva_mm_manual"": true, ""vulnerabilidade_used"": 0.5, ""vulnerabilidade_db_value"": 0.5, ""vulnerabilidade_estimated"": false, ""vulnerabilidade_modified"": false, ""mare_m_used"": 0.9000000000000001, ""predicted_occurrences"": 1.4019296595662953, ""predicted_risk_probability"": 0.017278684618673434}"
+2025-11-04T19:50:57.444179,prediction,TORRE,"{""timestamp"": ""2025-11-04T19:50:57.444179"", ""bairro"": ""TORRE"", ""chuva_mm_used"": 200.0, ""chuva_mm_manual"": true, ""vulnerabilidade_used"": 0.5, ""vulnerabilidade_db_value"": 0.5, ""vulnerabilidade_estimated"": false, ""vulnerabilidade_modified"": false, ""mare_m_used"": 1.0500000000000003, ""predicted_occurrences"": 1.3856229046913449, ""predicted_risk_probability"": 0.09073271837806177}"
+2025-11-04T19:51:03.464901,prediction,TORRE,"{""timestamp"": ""2025-11-04T19:51:03.464901"", ""bairro"": ""TORRE"", ""chuva_mm_used"": 200.0, ""chuva_mm_manual"": true, ""vulnerabilidade_used"": 0.5, ""vulnerabilidade_db_value"": 0.5, ""vulnerabilidade_estimated"": false, ""vulnerabilidade_modified"": false, ""mare_m_used"": 1.2500000000000004, ""predicted_occurrences"": 1.3978956543138887, ""predicted_risk_probability"": 0.5025300020694645}"

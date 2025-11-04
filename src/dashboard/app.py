@@ -1,17 +1,13 @@
 from pathlib import Path
 import sys
-import argparse
 import warnings
 import json
+from datetime import datetime
 
 warnings.filterwarnings(
     "ignore",
     message="The keyword arguments have been deprecated and will be removed in a future release. Use `config` instead to specify Plotly configuration options."
 )
-
-parser = argparse.ArgumentParser(add_help=False)
-parser.add_argument("--instructions", action="store_true", help="Print Windows PowerShell instructions to set up venv and run the app")
-args, _ = parser.parse_known_args()
 
 try:
     import streamlit as st
@@ -44,13 +40,36 @@ try:
 except Exception:
     joblib = None
 
+try:
+    from PIL import Image
+except Exception:
+    Image = None
+
 repo_root = Path(__file__).resolve().parents[2]
 logo_path = repo_root / 'img' / 'logo.png'
+
+bairros_csv = repo_root / 'data' / 'bairros' / 'bairros.csv'
+audit_csv = repo_root / 'data' / 'bairros' / 'bairros_audit.csv'
+
+try:
+    from .sync_bairros_from_geojson import sync_bairros_from_geojson
+except Exception:
+    try:
+        from src.dashboard.sync_bairros_from_geojson import sync_bairros_from_geojson
+    except Exception:
+        sync_bairros_from_geojson = None
+
+page_icon = "🌊"
+if logo_path.exists() and Image is not None:
+    try:
+        page_icon = Image.open(logo_path)
+    except Exception:
+        page_icon = "🌊"
 
 st.set_page_config(
     layout="wide", 
     page_title="RecifeSafe",
-    page_icon=str(logo_path) if logo_path.exists() else "🌊"
+    page_icon=page_icon
 )
 
 data_csv = repo_root / 'data' / 'processed' / 'simulated_daily.csv'
@@ -68,13 +87,170 @@ def load_geojson(geojson_path):
     with open(geojson_path, 'r', encoding='utf-8') as f:
         return json.load(f)
 
+
+def _remove_accents(s: str) -> str:
+    """Remove acentos e normaliza strings para comparação robusta"""
+    import unicodedata
+    if not isinstance(s, str):
+        return s
+    nfkd = unicodedata.normalize('NFKD', s)
+    return ''.join([c for c in nfkd if not unicodedata.combining(c)])
+
+
+def _haversine(lat1, lon1, lat2, lon2):
+    import math
+    R = 6371.0
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lon2 - lon1)
+    a = math.sin(dphi/2)**2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda/2)**2
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+
+
+def _estimate_missing_vulnerability(bairros_df, geojson_data, k=3, power=1):
+    """Estimate vulnerability for bairros with missing vulnerability using IDW on centroid distances.
+
+    bairros_df: DataFrame with columns ['bairro','vulnerabilidade','lat_centroid','lon_centroid']
+    Returns: (vuln_map, estimated_set)
+    """
+    centroids = {}
+    feats = geojson_data.get('features', []) if geojson_data else []
+    for feat in feats:
+        props = feat.get('properties', {})
+        name = props.get('EBAIRRNOME') or props.get('NAME') or props.get('bairro') or props.get('nome')
+        if not name:
+            continue
+        lat, lon = None, None
+        geom = feat.get('geometry') or {}
+        gtype = geom.get('type')
+        coords = []
+        if gtype == 'Polygon':
+            for ring in geom.get('coordinates', []):
+                for lonp, latp in ring:
+                    coords.append((latp, lonp))
+        elif gtype == 'MultiPolygon':
+            for poly in geom.get('coordinates', []):
+                for ring in poly:
+                    for lonp, latp in ring:
+                        coords.append((latp, lonp))
+        if coords:
+            lat = sum([c[0] for c in coords]) / len(coords)
+            lon = sum([c[1] for c in coords]) / len(coords)
+            centroids[_remove_accents(str(name)).strip().upper()] = (lat, lon)
+
+    vuln_map = {}
+    estimated = set()
+    for _, r in bairros_df.iterrows():
+        name = str(r.get('bairro') or '').strip()
+        key = _remove_accents(name).upper()
+        try:
+            val = float(r.get('vulnerabilidade'))
+            if np.isnan(val):
+                val = None
+        except Exception:
+            val = None
+        if val is not None:
+            vuln_map[key] = val
+
+    unknown = [k for k in centroids.keys() if k not in vuln_map]
+    known = {k: centroids[k] for k in centroids.keys() if k in vuln_map}
+
+    for ub in unknown:
+        if not known:
+            vuln_map[ub] = float(bairros_df['vulnerabilidade'].mean()) if 'vulnerabilidade' in bairros_df.columns else 0.0
+            estimated.add(ub)
+            continue
+        lat_u, lon_u = centroids.get(ub)
+        dists = []
+        for kb, (lat_k, lon_k) in known.items():
+            dist = _haversine(lat_u, lon_u, lat_k, lon_k)
+            if dist < 1e-6:
+                dist = 1e-6
+            dists.append((kb, dist))
+        dists = sorted(dists, key=lambda x: x[1])[:k]
+        num = 0.0
+        den = 0.0
+        for kb, dist in dists:
+            w = 1.0 / (dist ** power)
+            num += w * vuln_map.get(kb, 0.0)
+            den += w
+        if den <= 0:
+            vuln_map[ub] = float(bairros_df['vulnerabilidade'].mean()) if 'vulnerabilidade' in bairros_df.columns else 0.0
+        else:
+            vuln_map[ub] = float(num / den)
+        estimated.add(ub)
+
+    return vuln_map, estimated
+
+
+def _append_audit_row(action, bairro, note, audit_path=audit_csv):
+    """Append a simple audit row to the bairros audit CSV.
+
+    Columns: timestamp, action, bairro, note
+    """
+    try:
+        row = {
+            'timestamp': datetime.utcnow().isoformat(),
+            'action': action,
+            'bairro': bairro,
+            'note': str(note)
+        }
+        df_row = pd.DataFrame([row])
+        if audit_path.exists():
+            df_row.to_csv(audit_path, mode='a', header=False, index=False, encoding='utf-8')
+        else:
+            df_row.to_csv(audit_path, mode='w', header=True, index=False, encoding='utf-8')
+    except Exception:
+        return
+
 if not data_csv.exists():
     st.title("RecifeSafe")
     st.warning(f"Dados não encontrados em {data_csv}. Rode: python src/data/generate_simulated_data.py")
 else:
     with st.spinner('Carregando dados...'):
         df = load_data(data_csv)
-    bairros = sorted(df['bairro'].unique())
+
+    geojson_path = repo_root / 'data' / 'bairros' / 'bairros.geojson'
+    geojson_data = None
+    bairros = sorted(df['bairro'].astype(str).unique())
+    bairros_df = pd.DataFrame()
+
+    vuln_map = {}
+    vuln_estimated_set = set()
+
+    if geojson_path.exists():
+        try:
+            geojson_data = load_geojson(geojson_path)
+        except Exception:
+            geojson_data = None
+
+    if geojson_data:
+        if sync_bairros_from_geojson is not None:
+            try:
+                sync_bairros_from_geojson(geojson_path, bairros_csv, audit_csv)
+            except Exception as e:
+                st.error(f"GeoJSON inválido ou sincronização falhou: {e}")
+                st.stop()
+
+        try:
+            bairros_df = pd.read_csv(bairros_csv)
+        except Exception:
+            bairros_df = pd.DataFrame()
+
+        feats = geojson_data.get('features', [])
+        bairros = []
+        for f in feats:
+            props = f.get('properties', {})
+            name = props.get('EBAIRRNOME') or props.get('NAME') or props.get('bairro') or props.get('nome')
+            if name:
+                bairros.append(str(name).strip())
+
+        try:
+            vuln_map, vuln_estimated_set = _estimate_missing_vulnerability(bairros_df, geojson_data, k=3, power=1)
+        except Exception:
+            vuln_map = {}
+            vuln_estimated_set = set()
 
     st.markdown("""
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -88,7 +264,7 @@ else:
     .stButton>button[kind="primary"]{background:linear-gradient(135deg,#dc3545 0%,#c82333 100%);}
     .stButton>button[kind="primary"]:hover{background:linear-gradient(135deg,#c82333 0%,#bd2130 100%);}
     iframe{width:100%!important;border:none;border-radius:8px;box-shadow:0 2px 12px rgba(0,0,0,0.1);}
-    .summary-box{background:#f8f9fa;padding:1.5rem;border-radius:8px;margin-top:1rem;box-shadow:0 2px 8px rgba(0,0,0,0.05);}
+    .summary-box{background:#f8f9fa;padding:1.5rem;border-radius:8px;margin-top:1rem;box-shadow:0 2px 8px rgba(0,0,0,0.05);border:none;}
     .nav-icon{margin-right:8px;font-size:1.1em;vertical-align:middle;}
     .section-icon{margin-right:10px;color:#dc3545;font-size:1.2em;}
     .metric-icon{font-size:1.5em;margin-right:8px;opacity:0.8;vertical-align:middle;}
@@ -170,7 +346,7 @@ else:
     """, unsafe_allow_html=True)
 
     if page == "Mapa de Risco":
-        st.markdown('<h1><i class="fas fa-map-marked-alt"></i> Mapa de Risco — Recife</h1>', unsafe_allow_html=True)
+        st.markdown('<h1><i class="fas fa-map-marked-alt"></i> Mapa de Risco</h1>', unsafe_allow_html=True)
         
         st.sidebar.markdown("---")
         st.sidebar.markdown('<h3><i class="fas fa-filter"></i> Filtros</h3>', unsafe_allow_html=True)
@@ -185,6 +361,11 @@ else:
             start_date = df['date'].max() - pd.Timedelta(days=30)
         elif period == "Últimos 90 dias":
             start_date = df['date'].max() - pd.Timedelta(days=90)
+        
+        mask_period = pd.Series(True, index=df.index)
+        if start_date is not None:
+            mask_period = mask_period & (df['date'] >= start_date)
+        df_period = df[mask_period].copy()
         
         mask = pd.Series(True, index=df.index)
         if sel_bairro:
@@ -204,69 +385,86 @@ else:
             
             geojson_path = repo_root / 'data' / 'bairros' / 'bairros.geojson'
             if geojson_path.exists():
-                geojson_data = load_geojson(geojson_path)
-                
-                bairros_selecionados_upper = [b.upper() for b in sel_bairro] if sel_bairro else []
-                
-                def normalize_nome(nome):
-                    return nome.upper().strip()
-                
-                def style_function(feature):
-                    bairro_nome = normalize_nome(feature['properties'].get('EBAIRRNOME', ''))
-                    
-                    if bairros_selecionados_upper and bairro_nome in bairros_selecionados_upper:
-                        return {
-                            'fillColor': '#FF0000',
-                            'color': '#000000',
-                            'weight': 2,
-                            'fillOpacity': 0.7
-                        }
-                    else:
-                        return {
-                            'fillColor': '#90EE90',
-                            'color': '#000000',
-                            'weight': 1,
-                            'fillOpacity': 0.4
-                        }
-                
-                def highlight_function(feature):
-                    return {
-                        'fillColor': '#FFFF00',
-                        'color': '#FF8C00',
-                        'weight': 3,
-                        'fillOpacity': 0.9
-                    }
-                
-                folium.GeoJson(
-                    geojson_data,
-                    style_function=style_function,
-                    highlight_function=highlight_function,
-                    tooltip=folium.GeoJsonTooltip(
-                        fields=['EBAIRRNOME'],
-                        aliases=['Bairro:'],
-                        localize=True
-                    )
-                ).add_to(m)
+                try:
+                    geojson_data = load_geojson(geojson_path)
+                except Exception as e:
+                    st.error(f"Erro ao carregar GeoJSON: {e}")
+                    geojson_data = None
+
+                if geojson_data:
+                    if sync_bairros_from_geojson is not None:
+                        try:
+                            sync_bairros_from_geojson(geojson_path, bairros_csv, audit_csv)
+                        except Exception as e:
+                            st.error(f"GeoJSON inválido ou sincronização falhou: {e}")
+                            st.stop()
+
+                    try:
+                        bairros_df = pd.read_csv(bairros_csv)
+                    except Exception:
+                        bairros_df = pd.DataFrame()
+
+                    feats = geojson_data.get('features', [])
+                    bairros = []
+                    for f in feats:
+                        props = f.get('properties', {})
+                        name = props.get('EBAIRRNOME') or props.get('NAME') or props.get('bairro') or props.get('nome')
+                        if name:
+                            bairros.append(str(name).strip())
+
+                    try:
+                        vuln_map, vuln_estimated_set = _estimate_missing_vulnerability(bairros_df, geojson_data, k=3, power=1)
+                    except Exception:
+                        vuln_map = {}
+                        vuln_estimated_set = set()
+
+                    bairros_selecionados_upper = [ _remove_accents(b).strip().upper() for b in sel_bairro ] if sel_bairro else []
+
+                    def normalize_nome(nome):
+                        return _remove_accents(str(nome)).strip().upper()
+
+                    def style_function(feature):
+                        bairro_nome = normalize_nome(feature['properties'].get('EBAIRRNOME', ''))
+                        if bairros_selecionados_upper and bairro_nome in bairros_selecionados_upper:
+                            return {'fillColor': '#FF0000','color': '#000000','weight': 2,'fillOpacity': 0.7}
+                        if bairro_nome in (set(vuln_estimated_set) if isinstance(vuln_estimated_set, set) else set()):
+                            return {'fillColor': '#FFF8DC','color': '#000000','weight': 1,'fillOpacity': 0.5}
+                        return {'fillColor': '#90EE90','color': '#000000','weight': 1,'fillOpacity': 0.4}
+
+                    def highlight_function(feature):
+                        return {'fillColor': '#FFFF00','color': '#FF8C00','weight': 3,'fillOpacity': 0.9}
+
+                    folium.GeoJson(
+                        geojson_data,
+                        style_function=style_function,
+                        highlight_function=highlight_function,
+                        tooltip=folium.GeoJsonTooltip(fields=['EBAIRRNOME'], aliases=['Bairro:'], localize=True),
+                    ).add_to(m)
             
             html(m._repr_html_(), height=600)
         else:
             st.info("Sem dados georreferenciados para o período selecionado.")
         
-        st.markdown('<div class="summary-box">', unsafe_allow_html=True)
-        st.markdown('<h3><i class="fas fa-chart-bar"></i> Resumo dos Dados</h3>', unsafe_allow_html=True)
+        st.markdown('<div class="summary-box" style="border-top:none;margin-top:1.5rem;">', unsafe_allow_html=True)
+        st.markdown('<h3 style="margin-top:0;"><i class="fas fa-chart-bar"></i> Resumo dos Dados</h3>', unsafe_allow_html=True)
+        
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.markdown('<p style="font-size: 0.9em; color: #666;"><i class="fas fa-building metric-icon"></i>Bairros</p>', unsafe_allow_html=True)
-            st.metric("Bairros", len(dff['bairro'].unique()) if not dff.empty else 0, label_visibility="collapsed")
+            num_bairros = len(df_period['bairro'].unique()) if not df_period.empty else 0
+            st.metric("Bairros", num_bairros, label_visibility="collapsed")
         with col2:
             st.markdown('<p style="font-size: 0.9em; color: #666;"><i class="fas fa-exclamation-triangle metric-icon"></i>Ocorrências Totais</p>', unsafe_allow_html=True)
-            st.metric("Ocorrências Totais", int(dff['ocorrencias'].sum()) if not dff.empty else 0, label_visibility="collapsed")
+            total_occ = int(df_period['ocorrencias'].sum()) if not df_period.empty and 'ocorrencias' in df_period.columns else 0
+            st.metric("Ocorrências Totais", total_occ, label_visibility="collapsed")
         with col3:
             st.markdown('<p style="font-size: 0.9em; color: #666;"><i class="fas fa-shield-alt metric-icon"></i>Vulnerabilidade Média</p>', unsafe_allow_html=True)
-            st.metric("Vulnerabilidade Média", f"{dff['vulnerabilidade'].mean():.2f}" if not dff.empty else "0.00", label_visibility="collapsed")
+            vuln_mean = df_period['vulnerabilidade'].mean() if not df_period.empty and 'vulnerabilidade' in df_period.columns else 0.0
+            st.metric("Vulnerabilidade Média", f"{vuln_mean:.2f}", label_visibility="collapsed")
         with col4:
             st.markdown('<p style="font-size: 0.9em; color: #666;"><i class="fas fa-calendar-alt metric-icon"></i>Registros</p>', unsafe_allow_html=True)
-            st.metric("Registros", int(dff.shape[0]) if not dff.empty else 0, label_visibility="collapsed")
+            num_registros = int(df_period.shape[0]) if not df_period.empty else 0
+            st.metric("Registros", num_registros, label_visibility="collapsed")
         st.markdown('</div>', unsafe_allow_html=True)
 
     elif page == "Alertas e Previsões":
@@ -274,16 +472,199 @@ else:
         
         st.markdown('<h3><i class="fas fa-calculator"></i> Calcular Risco Futuro</h3>', unsafe_allow_html=True)
         
+        bairros_with_data = []
+        bairros_without_data = []
+        
+        for b in bairros:
+            b_norm = _remove_accents(str(b)).strip().upper()
+            df_match = df[df['bairro'].astype(str).map(lambda x: _remove_accents(x).upper()) == b_norm]
+            has_data = False
+            
+            if not df_match.empty and 'vulnerabilidade' in df_match.columns:
+                vuln_vals = df_match['vulnerabilidade'].dropna()
+                if not vuln_vals.empty:
+                    has_data = True
+            
+            if has_data:
+                bairros_with_data.append(f"[OK] {b}")
+            else:
+                bairros_without_data.append(f"[!] {b}")
+        
+        # Combine lists: with data first, then without
+        bairros_formatted = bairros_with_data + bairros_without_data
+        
+        # Info about data availability
+        st.markdown(
+            f'<div style="padding:10px;background:#f8f9fa;border-left:4px solid #17a2b8;border-radius:4px;margin-bottom:15px;box-shadow:0 2px 4px rgba(0,0,0,0.05);">'
+            f'<p style="margin:0;font-size:0.95em;color:#222;"><i class="fas fa-info-circle" style="color:#17a2b8;"></i> <strong>Legenda:</strong> '
+            f'<span style="color:#28a745;font-weight:bold;">[OK]</span> <span style="color:#333;">Bairro com dados</span> | '
+            f'<span style="color:#dc3545;font-weight:bold;">[!]</span> <span style="color:#333;">Sem dados (estimativa)</span></p>'
+            f'<p style="margin:6px 0 0 0;font-size:0.9em;color:#555;">'
+            f'Total: <strong style="color:#28a745;">{len(bairros_with_data)}</strong> com dados, '
+            f'<strong style="color:#dc3545;">{len(bairros_without_data)}</strong> sem dados</p>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
+        
+        bairro_selected_formatted = st.selectbox(
+            "Selecione o bairro para previsão", 
+            options=bairros_formatted, 
+            index=0, 
+            key="bairro_select_for_prediction"
+        )
+        
+        # Remove the prefix from selected bairro
+        bairro_selected = bairro_selected_formatted.replace("[OK] ", "").replace("[!] ", "").strip()
+        
+        # Get vulnerability from database/estimated for the selected bairro
+        bairro_upper = _remove_accents(str(bairro_selected)).strip().upper() if bairro_selected else None
+        vuln_db_value = None
+        used_vuln_estimated = False
+        vuln_source = "padrão"
+        
+        try:
+            # First, try to get from the simulated data (df)
+            if not df.empty and bairro_upper:
+                # Get vulnerability from main dataframe (simulated data)
+                df_match = df[df['bairro'].astype(str).map(lambda x: _remove_accents(x).upper()) == bairro_upper]
+                if not df_match.empty and 'vulnerabilidade' in df_match.columns:
+                    vuln_values = df_match['vulnerabilidade'].dropna()
+                    if not vuln_values.empty:
+                        vuln_db_value = float(vuln_values.mean())
+                        vuln_source = "dados simulados"
+                        if pd.isna(vuln_db_value) or not (0 <= vuln_db_value <= 1):
+                            vuln_db_value = None
+            
+            # Second, try bairros_df (synced from GeoJSON)
+            if vuln_db_value is None and not bairros_df.empty and bairro_upper:
+                match = bairros_df[bairros_df['bairro'].astype(str).map(lambda x: _remove_accents(x).upper()) == bairro_upper]
+                if not match.empty and 'vulnerabilidade' in match.columns:
+                    val = match.iloc[0].get('vulnerabilidade')
+                    if pd.notna(val):
+                        vuln_db_value = float(val)
+                        vuln_source = "banco de dados"
+                        if pd.isna(vuln_db_value) or not (0 <= vuln_db_value <= 1):
+                            vuln_db_value = None
+            
+            # Third, try vuln_map (IDW estimated)
+            if vuln_db_value is None and bairro_upper and bairro_upper in vuln_map:
+                vuln_db_value = float(vuln_map.get(bairro_upper))
+                if pd.notna(vuln_db_value) and (0 <= vuln_db_value <= 1):
+                    used_vuln_estimated = bairro_upper in (set(vuln_estimated_set) if isinstance(vuln_estimated_set, (set, list)) else set())
+                    vuln_source = "estimativa IDW"
+                else:
+                    vuln_db_value = None
+            
+            # Fourth, calculate IDW from simulated data if not in vuln_map
+            if vuln_db_value is None and bairro_upper:
+                try:
+                    # Get bairros with vulnerability data from simulated data
+                    df_with_vuln = df[df['vulnerabilidade'].notna()].copy()
+                    if not df_with_vuln.empty and not geojson_data is None:
+                        # Calculate mean vulnerability per bairro
+                        bairros_vuln = df_with_vuln.groupby('bairro')['vulnerabilidade'].mean().to_dict()
+                        
+                        # Get centroids from GeoJSON
+                        centroids = {}
+                        feats = geojson_data.get('features', [])
+                        for feat in feats:
+                            props = feat.get('properties', {})
+                            name = props.get('EBAIRRNOME') or props.get('NAME') or props.get('bairro') or props.get('nome')
+                            if not name:
+                                continue
+                            geom = feat.get('geometry') or {}
+                            gtype = geom.get('type')
+                            coords = []
+                            if gtype == 'Polygon':
+                                for ring in geom.get('coordinates', []):
+                                    for lonp, latp in ring:
+                                        coords.append((latp, lonp))
+                            elif gtype == 'MultiPolygon':
+                                for poly in geom.get('coordinates', []):
+                                    for ring in poly:
+                                        for lonp, latp in ring:
+                                            coords.append((latp, lonp))
+                            if coords:
+                                lat = sum([c[0] for c in coords]) / len(coords)
+                                lon = sum([c[1] for c in coords]) / len(coords)
+                                centroids[_remove_accents(str(name)).strip().upper()] = (lat, lon)
+                        
+                        # Find target bairro centroid
+                        if bairro_upper in centroids:
+                            lat_target, lon_target = centroids[bairro_upper]
+                            
+                            # Calculate distances to bairros with data
+                            distances = []
+                            for b_name, vuln_val in bairros_vuln.items():
+                                b_upper = _remove_accents(str(b_name)).strip().upper()
+                                if b_upper in centroids and b_upper != bairro_upper:
+                                    lat_b, lon_b = centroids[b_upper]
+                                    dist = _haversine(lat_target, lon_target, lat_b, lon_b)
+                                    if dist < 1e-6:
+                                        dist = 1e-6
+                                    distances.append((vuln_val, dist))
+                            
+                            # Use k=3 nearest neighbors for IDW
+                            if distances:
+                                k = min(3, len(distances))
+                                distances = sorted(distances, key=lambda x: x[1])[:k]
+                                
+                                # IDW calculation with power=1
+                                num = sum([v / d for v, d in distances])
+                                den = sum([1.0 / d for _, d in distances])
+                                
+                                if den > 0:
+                                    vuln_db_value = float(num / den)
+                                    vuln_source = "estimativa IDW (dados simulados)"
+                                    used_vuln_estimated = True
+                                    
+                                    if pd.isna(vuln_db_value) or not (0 <= vuln_db_value <= 1):
+                                        vuln_db_value = None
+                except Exception:
+                    pass
+            
+            # Final fallback
+            if vuln_db_value is None:
+                vuln_db_value = 0.5
+                vuln_source = "valor padrão"
+                used_vuln_estimated = True
+                
+        except Exception as e:
+            vuln_db_value = 0.5
+            used_vuln_estimated = True
+            vuln_source = "erro no carregamento"
+            st.warning(f"Erro ao carregar vulnerabilidade: {e}. Usando valor padrão: 0.5")
+        
+        st.markdown("---")
+        st.markdown('<h4><i class="fas fa-sliders-h"></i> Parâmetros da Previsão</h4>', unsafe_allow_html=True)
+        
+        # Display database vulnerability info with source
+        vuln_color = '#28a745' if vuln_source in ["dados simulados", "banco de dados"] else '#ff8c00'
+        vuln_icon = '<i class="fas fa-check-circle"></i>' if vuln_source in ["dados simulados", "banco de dados"] else '<i class="fas fa-exclamation-triangle"></i>'
+        
+        st.markdown(
+            f'<div style="padding:12px;background:#f8f9fa;border-left:4px solid {vuln_color};border-radius:6px;margin-bottom:15px;box-shadow:0 2px 4px rgba(0,0,0,0.1);">'
+            f'<p style="margin:0;font-size:0.9em;color:#333;"><i class="fas fa-map-marker-alt"></i> <strong>Bairro:</strong> {bairro_selected}</p>'
+            f'<p style="margin:5px 0 0 0;color:#333;"><i class="fas fa-shield-alt"></i> <strong style="color:#222;">Vulnerabilidade:</strong> '
+            f'<span style="color:{vuln_color};font-weight:bold;font-size:1.3em;">{vuln_db_value:.3f}</span> '
+            f'<span style="color:{vuln_color};font-weight:bold;">{vuln_icon}</span></p>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
+        
+        # Step 2: Manual inputs in columns
         col1, col2, col3 = st.columns(3)
+        
         with col1:
-            chuva_in = st.number_input(
-                "Chuva (mm)", 
-                value=10.0, 
-                step=0.5, 
-                min_value=0.0, 
-                max_value=200.0,
-                help="Precipitação esperada em milímetros (0-200mm)"
+            chuva_val = st.number_input(
+                "Precipitação (mm)",
+                value=0.0,
+                step=1.0,
+                min_value=0.0,
+                max_value=300.0,
+                help="Informe manualmente a precipitação esperada em milímetros"
             )
+        
         with col2:
             mare_in = st.number_input(
                 "Maré (m)", 
@@ -293,15 +674,24 @@ else:
                 max_value=3.0,
                 help="Nível de maré esperado em metros (0-3m)"
             )
+        
         with col3:
-            vuln_in = st.slider(
-                "Vulnerabilidade", 
-                0.0, 
-                1.0, 
-                0.3, 
-                0.01,
-                help="Índice de vulnerabilidade do bairro (0=baixa, 1=alta)"
+            vuln_value = st.slider(
+                "Vulnerabilidade",
+                min_value=0.0,
+                max_value=1.0,
+                value=float(vuln_db_value) if vuln_db_value is not None else 0.5,
+                step=0.01,
+                help=f"Ajuste a vulnerabilidade se necessário (valor do banco: {vuln_db_value:.2f})"
             )
+        
+        # Show if user modified the vulnerability
+        vuln_modified = abs(vuln_value - (vuln_db_value if vuln_db_value is not None else 0.5)) > 0.01
+        
+        if vuln_modified:
+            st.info(f"Você ajustou a vulnerabilidade de **{vuln_db_value:.2f}** para **{vuln_value:.2f}**")
+        
+        st.markdown("---")
         
         @st.cache_resource
         def load_models():
@@ -337,60 +727,153 @@ else:
                     st.error("Erro ao carregar modelos. Verifique os arquivos.")
                     st.stop()
                 
+                # Validate inputs before processing
+                if pd.isna(chuva_val) or pd.isna(mare_in) or pd.isna(vuln_value):
+                    st.error("❌ Erro: Um ou mais valores de entrada são inválidos (NaN). Por favor, verifique os campos.")
+                    st.stop()
+                
+                # Ensure all values are valid floats
+                try:
+                    chuva_val = float(chuva_val)
+                    mare_in = float(mare_in)
+                    vuln_value = float(vuln_value)
+                    
+                    # Additional safety checks
+                    if not (0 <= chuva_val <= 300):
+                        st.warning(f"Precipitação fora do intervalo esperado: {chuva_val:.1f}mm. Ajustando para valores válidos.")
+                        chuva_val = np.clip(chuva_val, 0, 300)
+                    
+                    if not (0 <= mare_in <= 3):
+                        st.warning(f"Maré fora do intervalo esperado: {mare_in:.2f}m. Ajustando para valores válidos.")
+                        mare_in = np.clip(mare_in, 0, 3)
+                    
+                    if not (0 <= vuln_value <= 1):
+                        st.warning(f"Vulnerabilidade fora do intervalo esperado: {vuln_value:.2f}. Ajustando para valores válidos.")
+                        vuln_value = np.clip(vuln_value, 0, 1)
+                        
+                except (ValueError, TypeError) as e:
+                    st.error(f"❌ Erro ao converter valores de entrada: {e}")
+                    st.stop()
+                
                 def z_score(x, arr):
                     """Calcula z-score com tratamento robusto"""
                     mean = arr.mean()
                     std = arr.std()
+                    if pd.isna(mean) or pd.isna(std):
+                        return 0.0
                     if std < 1e-9:
                         return 0.0
-                    return (x - mean) / std
+                    z = (x - mean) / std
+                    return 0.0 if pd.isna(z) else z
                 
-                chuva_z = z_score(chuva_in, df['chuva_mm'])
+                # Calculate z-scores with validation
+                chuva_z = z_score(chuva_val, df['chuva_mm'])
                 mare_z = z_score(mare_in, df['mare_m'])
-                vuln_z = z_score(vuln_in, df['vulnerabilidade'])
+                vuln_z = z_score(vuln_value, df['vulnerabilidade'])
                 
-                chuva_z = np.clip(chuva_z, -3, 3)
-                mare_z = np.clip(mare_z, -3, 3)
-                vuln_z = np.clip(vuln_z, -3, 3)
+                # Ensure no NaN in z-scores
+                chuva_z = 0.0 if pd.isna(chuva_z) else np.clip(chuva_z, -3, 3)
+                mare_z = 0.0 if pd.isna(mare_z) else np.clip(mare_z, -3, 3)
+                vuln_z = 0.0 if pd.isna(vuln_z) else np.clip(vuln_z, -3, 3)
                 
+                # Build feature dictionaries with NaN protection
                 feature_dict_reg = {
-                    'chuva_mm_z': chuva_z,
-                    'mare_m_z': mare_z,
-                    'vulnerabilidade_z': vuln_z,
-                    'chuva_x_vuln': chuva_z * vuln_z,
-                    'mare_x_vuln': mare_z * vuln_z,
-                    'chuva_x_mare': chuva_z * mare_z,
-                    'chuva_sq': chuva_z ** 2,
-                    'mare_sq': mare_z ** 2,
-                    'estacao_chuvosa': 1,
+                    'chuva_mm_z': float(chuva_z),
+                    'mare_m_z': float(mare_z),
+                    'vulnerabilidade_z': float(vuln_z),
+                    'chuva_x_vuln': float(chuva_z * vuln_z),
+                    'mare_x_vuln': float(mare_z * vuln_z),
+                    'chuva_x_mare': float(chuva_z * mare_z),
+                    'chuva_sq': float(chuva_z ** 2),
+                    'mare_sq': float(mare_z ** 2),
+                    'estacao_chuvosa': 1.0,
                     'densidade_pop_z': 0.0,
                     'altitude_z': 0.0
                 }
+                
+                # Ensure no NaN values in feature dict
+                for key in feature_dict_reg:
+                    if pd.isna(feature_dict_reg[key]):
+                        feature_dict_reg[key] = 0.0
+                
                 X_reg = [[feature_dict_reg.get(f, 0.0) for f in features_reg]]
                 
+                # Verify no NaN in X_reg
+                X_reg_array = np.array(X_reg)
+                if np.isnan(X_reg_array).any():
+                    st.error("❌ Erro: Valores NaN detectados nas features de regressão. Contate o suporte.")
+                    st.stop()
+                
                 feature_dict_clf = {
-                    'chuva_mm_z': chuva_z,
-                    'mare_m_z': mare_z,
-                    'vulnerabilidade_z': vuln_z,
-                    'chuva_x_vuln': chuva_z * vuln_z,
-                    'mare_x_vuln': mare_z * vuln_z,
-                    'chuva_sq': chuva_z ** 2,
-                    'estacao_chuvosa': 1,
+                    'chuva_mm_z': float(chuva_z),
+                    'mare_m_z': float(mare_z),
+                    'vulnerabilidade_z': float(vuln_z),
+                    'chuva_x_vuln': float(chuva_z * vuln_z),
+                    'mare_x_vuln': float(mare_z * vuln_z),
+                    'chuva_sq': float(chuva_z ** 2),
+                    'estacao_chuvosa': 1.0,
                     'densidade_pop_z': 0.0,
                     'altitude_z': 0.0
                 }
+                
+                # Ensure no NaN values in feature dict
+                for key in feature_dict_clf:
+                    if pd.isna(feature_dict_clf[key]):
+                        feature_dict_clf[key] = 0.0
+                
                 X_clf = [[feature_dict_clf.get(f, 0.0) for f in features_clf]]
+                
+                # Verify no NaN in X_clf
+                X_clf_array = np.array(X_clf)
+                if np.isnan(X_clf_array).any():
+                    st.error("❌ Erro: Valores NaN detectados nas features de classificação. Contate o suporte.")
+                    st.stop()
                 
                 try:
                     pred_occ = lr.predict(X_reg)[0]
                     prob_risk = clf.predict_proba(X_clf)[0,1]
-                    
+
                     pred_occ = max(0, pred_occ)
                     prob_risk = np.clip(prob_risk, 0, 1)
                 except Exception as e:
                     st.error(f"Erro na previsão: {e}")
                     st.stop()
-                
+
+                # Build a structured prediction result including flags about manual/estimated inputs
+                try:
+                    result = {
+                        'timestamp': datetime.utcnow().isoformat(),
+                        'bairro': str(bairro_selected),
+                        'chuva_mm_used': float(chuva_val) if chuva_val is not None else None,
+                        'chuva_mm_manual': True,  # Always manual now
+                        'vulnerabilidade_used': float(vuln_value) if vuln_value is not None else None,
+                        'vulnerabilidade_db_value': float(vuln_db_value) if vuln_db_value is not None else None,
+                        'vulnerabilidade_estimated': bool(used_vuln_estimated),
+                        'vulnerabilidade_modified': bool(vuln_modified),
+                        'mare_m_used': float(mare_in),
+                        'predicted_occurrences': float(pred_occ),
+                        'predicted_risk_probability': float(prob_risk)
+                    }
+                except Exception:
+                    # fallback to minimal result if conversion fails
+                    result = {
+                        'timestamp': datetime.utcnow().isoformat(),
+                        'bairro': str(bairro_selected),
+                        'predicted_occurrences': float(pred_occ),
+                        'predicted_risk_probability': float(prob_risk)
+                    }
+
+                # Append audit rows for any estimated/modified inputs used and a summary prediction audit
+                try:
+                    if used_vuln_estimated:
+                        _append_audit_row('estimated_vulnerability', bairro_selected, f"used_estimated_vuln={result.get('vulnerabilidade_db_value')}")
+                    if vuln_modified:
+                        _append_audit_row('modified_vulnerability', bairro_selected, f"changed_from={result.get('vulnerabilidade_db_value')}_to={result.get('vulnerabilidade_used')}")
+                    # record the prediction event
+                    _append_audit_row('prediction', bairro_selected, json.dumps(result, ensure_ascii=False))
+                except Exception:
+                    pass
+
                 st.markdown("---")
                 st.markdown('<h3><i class="fas fa-chart-line"></i> Resultado da Previsão</h3>', unsafe_allow_html=True)
                 
@@ -419,9 +902,10 @@ else:
             st.markdown('<div style="padding: 1rem; background-color: #d1ecf1; border-left: 4px solid #0c5460; border-radius: 4px; margin: 1rem 0;"><p style="margin: 0; color: #0c5460;"><i class="fas fa-info-circle" style="margin-right: 8px;"></i>Modelos não encontrados. Execute: <code>python src/models/train_models.py</code></p></div>', unsafe_allow_html=True)
         
         st.markdown("---")
-        st.markdown('<h3><i class="fas fa-map-marker-alt"></i> Locais Monitorados (por risco)</h3>', unsafe_allow_html=True)
+        st.markdown('<h3><i class="fas fa-map-marker-alt"></i> Locais Monitorados e Não Monitorados</h3>', unsafe_allow_html=True)
         
         if df is not None and not df.empty:
+            # Group existing data by bairro
             grouped_overall = df.groupby('bairro').agg({
                 'lat':'first',
                 'lon':'first',
@@ -430,25 +914,75 @@ else:
             }).reset_index()
             
             grouped_overall['risk_score'] = grouped_overall['ocorrencias'] + grouped_overall['vulnerabilidade'] * 10
-            grouped_overall = grouped_overall.sort_values('risk_score', ascending=False)
+            grouped_overall['has_data'] = True
             
-            for i, row in grouped_overall.head(10).iterrows():
-                col1, col2, col3 = st.columns([3, 1, 1])
+            # Create a complete list from GeoJSON bairros
+            all_bairros_list = []
+            for b in bairros:
+                b_norm = _remove_accents(str(b)).strip().upper()
+                match = grouped_overall[grouped_overall['bairro'].astype(str).map(lambda x: _remove_accents(x).upper()) == b_norm]
+                if not match.empty:
+                    row_data = match.iloc[0].to_dict()
+                    row_data['bairro_display'] = b
+                    all_bairros_list.append(row_data)
+                else:
+                    # Bairro without data
+                    all_bairros_list.append({
+                        'bairro': b,
+                        'bairro_display': b,
+                        'ocorrencias': 0,
+                        'vulnerabilidade': 0.0,
+                        'risk_score': 0.0,
+                        'has_data': False
+                    })
+            
+            all_bairros_df = pd.DataFrame(all_bairros_list)
+            all_bairros_df = all_bairros_df.sort_values('risk_score', ascending=False)
+            
+            # Show monitored (with data) first
+            st.markdown('<h4 style="color:#28a745;"><i class="fas fa-check-circle"></i> Locais Monitorados (com dados)</h4>', unsafe_allow_html=True)
+            monitored = all_bairros_df[all_bairros_df['has_data'] == True].head(15)
+            
+            if not monitored.empty:
+                for i, row in monitored.iterrows():
+                    col1, col2, col3 = st.columns([3, 1, 1])
+                    
+                    with col1:
+                        if row['risk_score'] > 15:
+                            icon_html = '<i class="fas fa-circle" style="color: #dc3545;"></i>'
+                        elif row['risk_score'] > 8:
+                            icon_html = '<i class="fas fa-circle" style="color: #ffc107;"></i>'
+                        else:
+                            icon_html = '<i class="fas fa-circle" style="color: #28a745;"></i>'
+                        st.markdown(f"{icon_html} **{row.get('bairro_display', row['bairro'])}**", unsafe_allow_html=True)
+                    
+                    with col2:
+                        st.caption(f"Ocorr: {int(row['ocorrencias'])}")
+                    
+                    with col3:
+                        st.caption(f"Vuln: {row['vulnerabilidade']:.2f}")
+            else:
+                st.info("Nenhum bairro com dados disponível.")
+            
+            # Show non-monitored (without data)
+            st.markdown("---")
+            st.markdown('<h4 style="color:#dc3545;"><i class="fas fa-exclamation-triangle"></i> Locais Não Monitorados (sem dados)</h4>', unsafe_allow_html=True)
+            not_monitored = all_bairros_df[all_bairros_df['has_data'] == False]
+            
+            if not not_monitored.empty:
+                st.markdown(f'<p style="color:#666;">Total de bairros sem dados: <strong>{len(not_monitored)}</strong></p>', unsafe_allow_html=True)
                 
-                with col1:
-                    if row['risk_score'] > 15:
-                        icon_html = '<i class="fas fa-circle" style="color: #dc3545;"></i>'
-                    elif row['risk_score'] > 8:
-                        icon_html = '<i class="fas fa-circle" style="color: #ffc107;"></i>'
-                    else:
-                        icon_html = '<i class="fas fa-circle" style="color: #28a745;"></i>'
-                    st.markdown(f"{icon_html} **{row['bairro']}**", unsafe_allow_html=True)
-                
-                with col2:
-                    st.caption(f"Ocorr: {int(row['ocorrencias'])}")
-                
-                with col3:
-                    st.caption(f"Vuln: {row['vulnerabilidade']:.2f}")
+                # Show in a more compact format with better contrast
+                bairros_sem_dados = not_monitored['bairro_display'].tolist()
+                chunk_size = 3
+                for i in range(0, len(bairros_sem_dados), chunk_size):
+                    chunk = bairros_sem_dados[i:i+chunk_size]
+                    cols = st.columns(chunk_size)
+                    for j, b_name in enumerate(chunk):
+                        with cols[j]:
+                            st.markdown(f'<div style="padding:8px;background:#ffe6e6;border-left:3px solid #dc3545;border-radius:4px;margin:4px 0;color:#333;"><i class="fas fa-map-marker-alt" style="color:#dc3545;"></i> <strong>{b_name}</strong></div>', unsafe_allow_html=True)
+            else:
+                st.success("Todos os bairros do GeoJSON possuem dados!")
 
     elif page == "Análises":
         st.markdown('<h1><i class="fas fa-chart-pie"></i> Análises Detalhadas</h1>', unsafe_allow_html=True)
@@ -1021,24 +1555,4 @@ else:
             else:
                 st.markdown('<div style="padding: 1rem; background-color: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px; margin: 1rem 0;"><p style="margin: 0; color: #856404;"><i class="fas fa-exclamation-circle" style="margin-right: 8px; color: #ffc107;"></i>Dados insuficientes para análise de ranking.</p></div>', unsafe_allow_html=True)
 
-def print_windows_instructions():
-    cmds = [
-        "cd c:\\PENTES\\RecifeSafe",
-        "python -m venv .venv",
-        ".\\.venv\\Scripts\\Activate.ps1",
-        "python -m pip install --upgrade pip",
-        "pip install -r requirements.txt",
-        "python src\\data\\generate_simulated_data.py",
-        "python src\\models\\train_models.py",
-        "streamlit run src\\dashboard\\app.py",
-        "",
-        "start \"\" \"%CD%\\src\\dashboard\\templates\\map_view.html\""
-    ]
-    print("\\nComandos PowerShell para Windows:\\n")
-    for c in cmds:
-        print(c)
-    print("")
 
-if args.instructions:
-    print_windows_instructions()
-    sys.exit(0)
