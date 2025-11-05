@@ -182,6 +182,6 @@ Contribuições são bem-vindas! Sinta-se à vontade para:
 
 <div align="center">
 
-**💙 Construindo uma Recife mais segura, um dado de cada vez**
+**Construindo um Recife mais seguro, um dado de cada vez**
 
 </div>
