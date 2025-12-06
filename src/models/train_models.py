@@ -3,21 +3,11 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-try:
-    import joblib
-except Exception:
-    joblib = None
-
-try:
-    from sklearn.linear_model import Ridge, LogisticRegression
-    from sklearn.preprocessing import StandardScaler
-    from sklearn.model_selection import train_test_split
-    from sklearn.metrics import mean_squared_error, r2_score, classification_report, confusion_matrix
-except Exception:
-    Ridge = None
-    LogisticRegression = None
-    StandardScaler = None
-    train_test_split = None
+import joblib
+from sklearn.linear_model import Ridge, LogisticRegression
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error, r2_score, classification_report, confusion_matrix
 
 def prepare_features(df):
     df = df.copy()
@@ -51,10 +41,6 @@ def calculate_risk_index(row):
     return min(risco, 1.0)
 
 def train_and_save_models(csv_path, models_dir):
-    if Ridge is None or LogisticRegression is None:
-        raise RuntimeError("scikit-learn nao disponivel")
-    if joblib is None:
-        raise RuntimeError("joblib nao disponivel")
     print("Carregando dados...")
     df = pd.read_csv(csv_path, parse_dates=['date'])
     print(f"   - {len(df)} registros, {df['bairro'].nunique()} bairros")
@@ -103,11 +89,6 @@ def train_and_save_models(csv_path, models_dir):
     joblib.dump(scalers, models_dir / 'scalers.joblib')
     joblib.dump(features_reg, models_dir / 'features_regression.joblib')
     joblib.dump(features_clf, models_dir / 'features_classification.joblib')
-    bairros_exemplo = df.groupby('bairro').agg({'chuva_mm': 'mean', 'mare_m': 'mean', 'vulnerabilidade': 'first', 'ocorrencias': 'sum', 'risk_index': 'mean'}).reset_index()
-    print("Exemplos de predicao por bairro:")
-    for _, row in bairros_exemplo.head(10).iterrows():
-        status = "ALTO" if row['risk_index'] > 0.6 else "MODERADO" if row['risk_index'] > 0.3 else "BAIXO"
-        print(f"  {row['bairro']}: chuva={row['chuva_mm']:.1f}mm, mare={row['mare_m']:.2f}m, vuln={row['vulnerabilidade']:.2f}, ocorr={int(row['ocorrencias'])}, risco={row['risk_index']:.3f} ({status})")
     print("Treinamento concluido!")
 
 if __name__ == "__main__":

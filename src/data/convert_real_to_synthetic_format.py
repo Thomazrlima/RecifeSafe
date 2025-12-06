@@ -311,9 +311,7 @@ def load_mare_data(file_path: Path) -> pd.DataFrame:
         print(f"   ⚠️ Valores ausentes de maré preenchidos com média: {media_mare:.2f}m")
     
     result = df[['date', 'mare_m']].copy()
-    print(f"   ✅ {len(result)} registros de maré carregados")
-    print(f"   📈 Maré média: {result['mare_m'].mean():.2f}m (min: {result['mare_m'].min():.2f}m, max: {result['mare_m'].max():.2f}m)")
-    
+    print(f"   {len(result)} registros de maré carregados")
     return result
 
 
@@ -395,10 +393,7 @@ def load_chuva_data(file_path: Path) -> pd.DataFrame:
         'chuva_mm': 'mean'
     })
     
-    print(f"   ✅ {len(result)} registros de chuva carregados")
-    print(f"   🏘️ {result['bairro'].nunique()} bairros com dados")
-    print(f"   🌧️ Chuva média: {result['chuva_mm'].mean():.1f}mm (max: {result['chuva_mm'].max():.1f}mm)")
-    
+    print(f"   {len(result)} registros de chuva carregados ({result['bairro'].nunique()} bairros)")
     return result
 
 
@@ -551,11 +546,7 @@ def merge_and_enrich_data(
     
     # Ordenar por data e bairro
     df_base = df_base.sort_values(['date', 'bairro']).reset_index(drop=True)
-    
-    print(f"   ✅ Dataset final: {len(df_base)} registros")
-    print(f"   📅 Período: {df_base['date'].min().date()} a {df_base['date'].max().date()}")
-    print(f"   🏘️ {df_base['bairro'].nunique()} bairros")
-    
+    print(f"   Dataset final: {len(df_base)} registros, {df_base['bairro'].nunique()} bairros")
     return df_base
 
 

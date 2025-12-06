@@ -15,35 +15,15 @@ try:
 except Exception:
     print("Streamlit não encontrado. Instale as dependências:")
     print("  pip install -r requirements.txt")
-    print("  python -m streamlit run src\dashboard\app.py")
+    print("  python -m streamlit run src/dashboard/app.py")
     sys.exit(1)
 
-try:
-    import pandas as pd
-    import numpy as np
-except Exception:
-    pd = None
-    np = None
-
-try:
-    import plotly.express as px
-except Exception:
-    px = None
-
-try:
-    import folium
-except Exception:
-    folium = None
-
-try:
-    import joblib
-except Exception:
-    joblib = None
-
-try:
-    from PIL import Image
-except Exception:
-    Image = None
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import folium
+import joblib
+from PIL import Image
 
 repo_root = Path(__file__).resolve().parents[2]
 logo_path = repo_root / 'img' / 'logo.png'
@@ -51,13 +31,7 @@ logo_path = repo_root / 'img' / 'logo.png'
 bairros_csv = repo_root / 'data' / 'bairros' / 'bairros.csv'
 audit_csv = repo_root / 'data' / 'bairros' / 'bairros_audit.csv'
 
-try:
-    from .sync_bairros_from_geojson import sync_bairros_from_geojson
-except Exception:
-    try:
-        from src.dashboard.sync_bairros_from_geojson import sync_bairros_from_geojson
-    except Exception:
-        sync_bairros_from_geojson = None
+from src.dashboard.sync_bairros_from_geojson import sync_bairros_from_geojson
 
 page_icon = "🌊"
 if logo_path.exists() and Image is not None:
@@ -720,7 +694,7 @@ else:
                 }
                 </style>
             """, unsafe_allow_html=True)
-            if st.button("Calcular Risco", use_container_width=True, type="primary"):
+            if st.button("Calcular Risco", width="stretch", type="primary"):
                 lr, clf, features_reg, features_clf = load_models()
                 
                 if lr is None or clf is None:
@@ -1031,15 +1005,15 @@ else:
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            if st.button("Marés × Chuva", use_container_width=True, type="primary", key="btn_tides"):
+            if st.button("Marés × Chuva", width="stretch", type="primary", key="btn_tides"):
                 st.session_state['analysis_view'] = 'tides'
         
         with col2:
-            if st.button("Clima e Correlações", use_container_width=True, type="primary", key="btn_weather"):
+            if st.button("Clima e Correlações", width="stretch", type="primary", key="btn_weather"):
                 st.session_state['analysis_view'] = 'weather'
         
         with col3:
-            if st.button("Ranking de Bairros", use_container_width=True, type="primary", key="btn_ranking"):
+            if st.button("Ranking de Bairros", width="stretch", type="primary", key="btn_ranking"):
                 st.session_state['analysis_view'] = 'ranking'
         
         if 'analysis_view' not in st.session_state:
@@ -1097,7 +1071,7 @@ else:
                 fig.update_traces(line=dict(width=2.5))
                 fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
                 fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
-                st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+                st.plotly_chart(fig, width='stretch', config={'displayModeBar': False})
                 
                 st.markdown('<div style="padding: 1rem; background-color: #d1ecf1; border-left: 4px solid #0c5460; border-radius: 4px; margin: 1rem 0;"><p style="margin: 0; color: #0c5460;"><i class="fas fa-lightbulb" style="margin-right: 8px;"></i><strong>Interpretação:</strong> As linhas mostram como chuva e maré variam ao longo do tempo. Picos simultâneos (ambas altas) indicam maior risco de alagamento.</p></div>', unsafe_allow_html=True)
                 
@@ -1136,7 +1110,7 @@ else:
                 )
                 fig_scatter.update_xaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
                 fig_scatter.update_yaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
-                st.plotly_chart(fig_scatter, use_container_width=True, config={'displayModeBar': False})
+                st.plotly_chart(fig_scatter, width='stretch', config={'displayModeBar': False})
                 
                 st.markdown('<div style="padding: 1rem; background-color: #d1ecf1; border-left: 4px solid #0c5460; border-radius: 4px; margin: 1rem 0;"><p style="margin: 0; color: #0c5460;"><i class="fas fa-lightbulb" style="margin-right: 8px;"></i><strong>Interpretação:</strong> Cada ponto representa um dia em um bairro. Pontos vermelhos (alto risco) tendem a aparecer quando <strong>maré E chuva</strong> são altas simultaneamente.</p></div>', unsafe_allow_html=True)
                 
@@ -1248,7 +1222,7 @@ else:
                 )
                 fig_chuva.update_xaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
                 fig_chuva.update_yaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
-                st.plotly_chart(fig_chuva, use_container_width=True, config={'displayModeBar': False})
+                st.plotly_chart(fig_chuva, width='stretch', config={'displayModeBar': False})
                 
                 st.markdown('<div style="padding: 1rem; background-color: #d1ecf1; border-left: 4px solid #0c5460; border-radius: 4px; margin: 1rem 0;"><p style="margin: 0; color: #0c5460;"><i class="fas fa-lightbulb" style="margin-right: 8px;"></i><strong>Interpretação:</strong> Cada ponto representa um dia/bairro. A linha de tendência mostra que <strong>quanto maior a chuva, maior o número de ocorrências</strong>. Pontos mais vermelhos indicam áreas mais vulneráveis.</p></div>', unsafe_allow_html=True)
                 
@@ -1274,7 +1248,7 @@ else:
                 )
                 fig_box.update_xaxes(showgrid=False)
                 fig_box.update_yaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
-                st.plotly_chart(fig_box, use_container_width=True, config={'displayModeBar': False})
+                st.plotly_chart(fig_box, width='stretch', config={'displayModeBar': False})
                 
                 st.markdown('<div style="padding: 1rem; background-color: #d1ecf1; border-left: 4px solid #0c5460; border-radius: 4px; margin: 1rem 0;"><p style="margin: 0; color: #0c5460;"><i class="fas fa-lightbulb" style="margin-right: 8px;"></i><strong>Interpretação:</strong> As caixas mostram a variação típica de ocorrências para cada faixa de chuva. <strong>Chuvas intensas</strong> (>50mm) geram consistentemente mais ocorrências, com valores máximos muito superiores.</p></div>', unsafe_allow_html=True)
                 
@@ -1307,7 +1281,7 @@ else:
                 fig_bar.update_xaxes(showgrid=False)
                 fig_bar.update_yaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
                 fig_bar.update_traces(textposition='outside')
-                st.plotly_chart(fig_bar, use_container_width=True, config={'displayModeBar': False})
+                st.plotly_chart(fig_bar, width='stretch', config={'displayModeBar': False})
                 
                 media_leve = risco_por_faixa[risco_por_faixa['faixa_chuva'] == 'Leve (<10mm)']['ocorrencias'].values
                 media_intensa = risco_por_faixa[risco_por_faixa['faixa_chuva'] == 'Intensa (>50mm)']['ocorrencias'].values
@@ -1338,7 +1312,7 @@ else:
                     plot_bgcolor='rgba(0,0,0,0)',
                     paper_bgcolor='rgba(0,0,0,0)'
                 )
-                st.plotly_chart(fig_vuln, use_container_width=True, config={'displayModeBar': False})
+                st.plotly_chart(fig_vuln, width='stretch', config={'displayModeBar': False})
                 
                 st.markdown('<div style="padding: 1rem; background-color: #d1ecf1; border-left: 4px solid #0c5460; border-radius: 4px; margin: 1rem 0;"><p style="margin: 0; color: #0c5460;"><i class="fas fa-lightbulb" style="margin-right: 8px;"></i><strong>Interpretação:</strong> Áreas mais escuras concentram maior número de ocorrências. Observa-se que <strong>bairros mais vulneráveis</strong> (à direita) sofrem mais impacto, mesmo com chuvas moderadas.</p></div>', unsafe_allow_html=True)
                 
@@ -1363,7 +1337,7 @@ else:
                     )
                     fig_hist.update_xaxes(showgrid=False)
                     fig_hist.update_yaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
-                    st.plotly_chart(fig_hist, use_container_width=True, config={'displayModeBar': False})
+                    st.plotly_chart(fig_hist, width='stretch', config={'displayModeBar': False})
                 
                 with col2:
                     st.markdown('<h4><i class="fas fa-chart-line"></i> Estatísticas</h4>', unsafe_allow_html=True)
@@ -1428,7 +1402,7 @@ else:
                 fig_ranking.update_traces(texttemplate='%{text:.1f}', textposition='outside')
                 fig_ranking.update_xaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
                 fig_ranking.update_yaxes(showgrid=False)
-                st.plotly_chart(fig_ranking, use_container_width=True, config={'displayModeBar': False})
+                st.plotly_chart(fig_ranking, width='stretch', config={'displayModeBar': False})
                 
                 st.markdown('<div style="padding: 1rem; background-color: #d1ecf1; border-left: 4px solid #0c5460; border-radius: 4px; margin: 1rem 0;"><p style="margin: 0; color: #0c5460;"><i class="fas fa-lightbulb" style="margin-right: 8px;"></i><strong>Interpretação:</strong> O score de risco é calculado considerando: <strong>40% ocorrências</strong>, <strong>30% vulnerabilidade</strong>, <strong>20% precipitação média</strong> e <strong>10% nível de maré</strong>. Quanto maior o score, maior a prioridade de atenção.</p></div>', unsafe_allow_html=True)
                 
@@ -1446,7 +1420,7 @@ else:
                 
                 st.dataframe(
                     ranking_display,
-                    use_container_width=True,
+                    width='stretch',
                     hide_index=True,
                     column_config={
                         "Posição": st.column_config.NumberColumn("Posição", width="small"),
@@ -1506,7 +1480,7 @@ else:
                 )
                 fig_matriz.update_xaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
                 fig_matriz.update_yaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
-                st.plotly_chart(fig_matriz, use_container_width=True, config={'displayModeBar': False})
+                st.plotly_chart(fig_matriz, width='stretch', config={'displayModeBar': False})
                 
                 st.markdown('<div style="padding: 1rem; background-color: #d1ecf1; border-left: 4px solid #0c5460; border-radius: 4px; margin: 1rem 0;"><p style="margin: 0; color: #0c5460;"><i class="fas fa-lightbulb" style="margin-right: 8px;"></i><strong>Interpretação:</strong> Bairros no <strong>quadrante superior direito</strong> (alta ocorrência + alta vulnerabilidade) são os mais críticos e demandam atenção prioritária. O tamanho das bolhas representa o score composto de risco.</p></div>', unsafe_allow_html=True)
                 
@@ -1548,7 +1522,7 @@ else:
                 fig_evolucao.update_traces(line=dict(width=2))
                 fig_evolucao.update_xaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
                 fig_evolucao.update_yaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
-                st.plotly_chart(fig_evolucao, use_container_width=True, config={'displayModeBar': False})
+                st.plotly_chart(fig_evolucao, width='stretch', config={'displayModeBar': False})
                 
                 st.markdown('<div style="padding: 1rem; background-color: #d1ecf1; border-left: 4px solid #0c5460; border-radius: 4px; margin: 1rem 0;"><p style="margin: 0; color: #0c5460;"><i class="fas fa-lightbulb" style="margin-right: 8px;"></i><strong>Interpretação:</strong> Acompanhe a variação de ocorrências ao longo do tempo nos 5 bairros mais críticos. Identifique padrões sazonais e picos de eventos.</p></div>', unsafe_allow_html=True)
                 

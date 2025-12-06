@@ -211,17 +211,7 @@ def generate_data(n_days=365, seed=42, out_csv=None):
         out_path = Path(out_csv)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         df.to_csv(out_path, index=False)
-        print(f"✅ Dados simulados realistas salvos: {out_path}")
-        print(f"   - {len(BAIRROS_RECIFE)} bairros")
-        print(f"   - {n_days} dias")
-        print(f"   - {len(df)} registros totais")
-        
-        # Estatísticas resumidas
-        print(f"\n📊 Estatísticas:")
-        print(f"   - Chuva média: {df['chuva_mm'].mean():.1f}mm (σ={df['chuva_mm'].std():.1f})")
-        print(f"   - Maré média: {df['mare_m'].mean():.2f}m (σ={df['mare_m'].std():.2f})")
-        print(f"   - Ocorrências totais: {df['ocorrencias'].sum()}")
-        print(f"   - Vulnerabilidade média: {df['vulnerabilidade'].mean():.2f}")
+        print(f"Dados salvos: {out_path} ({len(df)} registros, {len(BAIRROS_RECIFE)} bairros, {n_days} dias)")
     
     return df
 
