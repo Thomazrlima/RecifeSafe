@@ -115,6 +115,72 @@ RecifeSafe/
 
 ---
 
+## 🚀 Instalação e Uso
+
+### **Pré-requisitos**
+
+- Python 3.9 ou superior
+- Git
+
+### **1. Clone o repositório**
+
+```bash
+git clone https://github.com/Thomazrlima/RecifeSafe.git
+cd RecifeSafe
+```
+
+### **2. Crie e ative o ambiente virtual**
+
+**Windows:**
+```powershell
+python -m venv .venv
+.venv\Scripts\activate
+```
+
+**Linux/Mac:**
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+### **3. Instale as dependências**
+
+```bash
+pip install -r requirements.txt
+```
+
+### **4. Gere os dados simulados**
+
+```bash
+python src/data/generate_simulated_data.py
+```
+
+### **5. Treine os modelos**
+
+```bash
+python src/models/train_models.py
+```
+
+### **6. Execute o Dashboard**
+
+```bash
+streamlit run src/dashboard/app.py
+```
+
+O dashboard estará disponível em: **http://localhost:8501**
+
+### **7. Execute os Notebooks (Opcional)**
+
+```bash
+jupyter notebook
+```
+
+Navegue até a pasta `notebooks/` e abra:
+- `RecifeSafe_Analise_Preditiva.ipynb` - Análise exploratória completa
+- `RecifeSafe_Testagem_Modelos.ipynb` - Testagem e validação dos modelos
+
+---
+
 ## 🌍 Objetivos
 
 ### 🎯 **Principais Metas**
