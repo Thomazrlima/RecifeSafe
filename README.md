@@ -2,6 +2,14 @@
 
 <p align="center"> <img width="1913" height="674" alt="Banner RecifeSafe" src="https://github.com/Thomazrlima/RecifeSafe/blob/main/img/banner.png" /> </p><p align="center"> </p><p align="center"> <a href="#-sobre-o-projeto">Sobre</a> • <a href="#-funcionalidades-principais">Funcionalidades</a> • <a href="#-metodologia">Metodologia</a> • <a href="#-tecnologias-utilizadas">Tecnologias</a> • <a href="#-estrutura-do-projeto">Estrutura</a> • <a href="#-instalação-e-uso">Instalação</a> • <a href="#-nossa-equipe">Equipe</a> • <a href="#-próximos-passos">Próximos Passos</a> </p>
 
+## 🌐 Acesso ao Sistema
+
+**🚀 Aplicação disponível online:** [https://recifesafe.streamlit.app/](https://recifesafe.streamlit.app/)
+
+Acesse o dashboard interativo diretamente pelo navegador, sem necessidade de instalação local.
+
+---
+
 ## 🚀 Sobre o Projeto
 
 O **RecifeSafe** é um sistema inteligente de análise e visualização de riscos ambientais desenvolvido para apoiar a **Defesa Civil** e a **Prefeitura do Recife** na **prevenção e resposta a deslizamentos e alagamentos**.
