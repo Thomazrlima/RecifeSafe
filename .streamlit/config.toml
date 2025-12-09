@@ -1,9 +1,19 @@
 [theme]
+primaryColor = "#1f77b4"
+backgroundColor = "#0e1117"
+secondaryBackgroundColor = "#262730"
+textColor = "#fafafa"
+font = "sans serif"
 
 [server]
 headless = true
 port = 8501
 enableXsrfProtection = true
+maxUploadSize = 200
 
 [browser]
 gatherUsageStats = false
+serverAddress = "0.0.0.0"
+
+[client]
+showErrorDetails = true
