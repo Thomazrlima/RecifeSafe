@@ -165,7 +165,7 @@ def _append_audit_row(action, bairro, note, audit_path=audit_csv):
     """
     try:
         row = {
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': datetime.now(datetime.UTC).isoformat(),
             'action': action,
             'bairro': bairro,
             'note': str(note)

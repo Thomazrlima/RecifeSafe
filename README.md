@@ -171,8 +171,19 @@ python src/models/train_models.py
 
 ### **6. Execute o Dashboard**
 
+**Windows (PowerShell):**
+```powershell
+.venv\Scripts\python.exe -m streamlit run src\dashboard\app.py
+```
+
+**Ou para reiniciar completamente:**
+```powershell
+Get-Process python -ErrorAction SilentlyContinue | Stop-Process -Force; Start-Sleep -Seconds 2; .venv\Scripts\python.exe -m streamlit run src\dashboard\app.py
+```
+
+**Linux/Mac:**
 ```bash
-streamlit run src/dashboard/app.py
+.venv/bin/python -m streamlit run src/dashboard/app.py
 ```
 
 O dashboard estará disponível em: **http://localhost:8501**
