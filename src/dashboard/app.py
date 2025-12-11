@@ -326,7 +326,6 @@ else:
         st.sidebar.markdown('<h3><i class="fas fa-filter"></i> Filtros</h3>', unsafe_allow_html=True)
         sel_bairro = st.sidebar.multiselect("Bairros", options=bairros, default=bairros[:3] if len(bairros) >= 3 else bairros)
         period = st.sidebar.selectbox("Período", ["Últimos 7 dias","Últimos 30 dias","Últimos 90 dias"], index=1)
-        vuln_min = st.sidebar.slider("Vulnerabilidade (mín)", 0.0, 1.0, 0.0, 0.01)
         
         start_date = None
         if period == "Últimos 7 dias":
@@ -346,8 +345,6 @@ else:
             mask = mask & df['bairro'].isin(sel_bairro)
         if start_date is not None:
             mask = mask & (df['date'] >= start_date)
-        if vuln_min > 0:
-            mask = mask & (df['vulnerabilidade'] >= vuln_min)
         dff = df[mask].copy()
         
         st.markdown("### Mapa de Ocorrências")

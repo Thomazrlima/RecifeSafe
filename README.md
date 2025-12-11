@@ -4,9 +4,9 @@
 
 ## 🌐 Acesso ao Sistema
 
-**🚀 Aplicação disponível online:** [https://recifesafe.streamlit.app/](https://recifesafe.streamlit.app/)
+**🚀 Aplicação disponível online:** [https://recifesafe.onrender.com/](https://recifesafe.onrender.com/)
 
-Acesse o dashboard interativo diretamente pelo navegador, sem necessidade de instalação local.
+⚠️ **Atenção:** O deploy gratuito possui limitações de desempenho (512 MB de RAM), o que pode resultar em lentidão. **Recomendamos fortemente a execução local** para melhor experiência e performance completa do sistema. Consulte as [instruções de instalação](#-instalação-e-uso) abaixo.
 
 ---
 
